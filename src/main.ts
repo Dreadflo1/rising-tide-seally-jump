@@ -225,7 +225,10 @@ function setupEntry() {
   const refreshAccountUI = () => {
     const s = getSession();
     const logged = isCloudLoggedIn() && s && !s.isGuest;
-    if (accountBtn) accountBtn.textContent = logged ? s!.username : 'Account';
+    if (accountBtn) {
+      accountBtn.textContent = logged ? s!.username : 'Log In';
+      accountBtn.classList.toggle('primary', true);
+    }
     if (nickInput && s && !s.isGuest && !nickInput.value) nickInput.value = s.username;
   };
   refreshAccountUI();
