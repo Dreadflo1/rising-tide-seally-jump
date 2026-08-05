@@ -184,6 +184,19 @@
     #landing .auth-switch { margin-top:14px; font-size:13px; color:#5b7a95; }
     #landing .auth-switch a { color:var(--ocean); font-weight:800; }
     #landing .auth-hint { margin-top:10px; font-size:12px; color:#5b7a95; }
+    #landing .account-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:18px 0 14px; text-align:left; }
+    #landing .account-stat { background:#f4f8fb; border:1px solid #e3edf4; border-radius:14px; padding:12px 14px; }
+    #landing .account-stat .k { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#7a93a8; font-weight:800; margin-bottom:4px; }
+    #landing .account-stat .v { font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; color:var(--deep); word-break:break-word; }
+    #landing .account-stat.wide { grid-column:1 / -1; }
+    #landing .account-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    #landing .account-actions .row { display:flex; gap:8px; }
+    #landing .account-actions button, #landing .account-actions a { flex:1; min-width:0; font-family:'Baloo 2',sans-serif; font-weight:700; border:none; cursor:pointer;
+      border-radius:14px; padding:12px 14px; text-align:center; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+    #landing .account-actions .play { background:var(--mint); color:var(--deep); box-shadow:0 4px 0 var(--mint2); }
+    #landing .account-actions .lb { background:var(--sky); color:var(--deep); box-shadow:0 4px 0 var(--ocean); }
+    #landing .account-actions .skins { background:rgba(2,20,44,.08); color:var(--deep); border:1px solid var(--stroke); }
+    #landing .account-actions .logout { background:transparent; color:#d1495b; border:1px dashed #f1c8cf; }
   </style>
 
   <!-- Only load the GameDistribution SDK when served FROM a gamedistribution.com
@@ -368,22 +381,46 @@
       </div>
     </div>
 
-    <!-- Cloud account modal (cross-device sync) -->
+    <!-- Cloud account modal (cross-device sync) or Account panel -->
     <div id="auth-modal" class="auth-modal">
-      <div class="auth-card">
+      <div id="auth-card" class="auth-card">
         <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
-        <h3 id="auth-title">Log in</h3>
-        <p class="auth-sub">Save your progress &amp; leaderboard spot across devices with Google or email.</p>
-        <div id="auth-google" class="auth-google-host"></div>
-        <div id="auth-google-note" class="auth-google-note"></div>
-        <div class="auth-divider">or use email</div>
-        <input id="auth-name" class="hidden" type="text" placeholder="Display name" maxlength="16" autocomplete="nickname" />
-        <input id="auth-email" type="email" placeholder="Email address" autocomplete="email username" />
-        <input id="auth-pass" type="password" placeholder="Password (4+ characters)" autocomplete="current-password" />
-        <div class="auth-err" id="auth-err"></div>
-        <button id="auth-submit" class="btn btn-play auth-primary">Log in</button>
-        <div class="auth-switch"><span id="auth-switch-text">No account yet?</span> <a href="#" id="auth-switch-link">Create account</a></div>
-        <div class="auth-hint">Google sign-in appears automatically when `GOOGLE_CLIENT_ID` is configured.</div>
+        <div id="auth-guest-view">
+          <h3 id="auth-title">Log in</h3>
+          <p class="auth-sub">Save your progress &amp; leaderboard spot across devices with Google or email.</p>
+          <div id="auth-google" class="auth-google-host"></div>
+          <div id="auth-google-note" class="auth-google-note"></div>
+          <div class="auth-divider">or use email</div>
+          <input id="auth-name" class="hidden" type="text" placeholder="Display name" maxlength="16" autocomplete="nickname" />
+          <input id="auth-email" type="email" placeholder="Email address" autocomplete="email username" />
+          <input id="auth-pass" type="password" placeholder="Password (4+ characters)" autocomplete="current-password" />
+          <div class="auth-err" id="auth-err"></div>
+          <button id="auth-submit" class="btn btn-play auth-primary">Log in</button>
+          <div class="auth-switch"><span id="auth-switch-text">No account yet?</span> <a href="#" id="auth-switch-link">Create account</a></div>
+        </div>
+        <div id="auth-account-view" style="display:none; text-align:left;">
+          <h3 style="margin-bottom:2px;">Your account</h3>
+          <p class="auth-sub" style="text-align:center;">Cross-device save is on. Everything below is synced when you play.</p>
+          <div class="account-grid">
+            <div class="account-stat wide"><span class="k">Display name</span><span id="acct-name" class="v">—</span></div>
+            <div class="account-stat"><span class="k">Email</span><span id="acct-email" class="v">—</span></div>
+            <div class="account-stat"><span class="k">Sign-in</span><span id="acct-provider" class="v">—</span></div>
+            <div class="account-stat"><span class="k">Best run</span><span id="acct-best" class="v">0 m</span></div>
+            <div class="account-stat"><span class="k">Pearls</span><span id="acct-coins" class="v">0 🦪</span></div>
+            <div class="account-stat"><span class="k">Runs</span><span id="acct-runs" class="v">0</span></div>
+            <div class="account-stat"><span class="k">Maps unlocked</span><span id="acct-maps" class="v">1 / 3</span></div>
+            <div class="account-stat"><span class="k">Skins owned</span><span id="acct-skins" class="v">1 / 5</span></div>
+            <div class="account-stat wide"><span class="k">Badges</span><span id="acct-badges" class="v">—</span></div>
+          </div>
+          <div class="account-actions">
+            <div class="row"><button id="acct-play" class="play">▶ Play now</button></div>
+            <div class="row">
+              <a id="acct-lb" class="lb" href="#leaderboard">🏆 Leaderboard</a>
+              <a id="acct-skins" class="skins" href="#skins">🦭 Skins</a>
+            </div>
+            <div class="row"><button id="acct-logout" class="logout">Log out on this device</button></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

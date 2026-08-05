@@ -7,8 +7,8 @@ import GameScene from './scenes/GameScene';
 import GameOverScene from './scenes/GameOverScene';
 import { WIDTH, HEIGHT, S, debugLog } from './constants';
 import { initErrorReporting } from './errorReporting';
-import { login, getSession } from './auth';
-import { fetchGlobalLeaderboard } from './state';
+import { login, getSession, logout as localLogout } from './auth';
+import { fetchGlobalLeaderboard, loadProfile, getState, BADGES, MAPS, SKINS } from './state';
 import { initCloudSync, cloudEmailLogin, cloudEmailSignup, cloudGoogleLogin, cloudLogout, getGoogleClientId, isCloudLoggedIn } from './cloud';
 
 interface GoogleCredentialResponse {
@@ -230,8 +230,11 @@ function setupEntry() {
   };
   refreshAccountUI();
 
-  // ---- Cloud account modal (Phase 2b): sign up / log in for cross-device sync.
+  // ---- Cloud account modal (Phase 2b): sign up / log in for cross-device sync,
+  // or Account summary view when already logged in with cloud sync.
   const authModal = document.getElementById('auth-modal');
+  const authGuestView = document.getElementById('auth-guest-view') as HTMLElement | null;
+  const authAccountView = document.getElementById('auth-account-view') as HTMLElement | null;
   const authName = document.getElementById('auth-name') as HTMLInputElement | null;
   const authEmail = document.getElementById('auth-email') as HTMLInputElement | null;
   const authPass = document.getElementById('auth-pass') as HTMLInputElement | null;
@@ -243,6 +246,47 @@ function setupEntry() {
   const authSwitchText = document.getElementById('auth-switch-text');
   const authSwitchLink = document.getElementById('auth-switch-link');
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const setAuthView = (which: 'guest' | 'account') => {
+    if (authGuestView) authGuestView.style.display = which === 'guest' ? '' : 'none';
+    if (authAccountView) authAccountView.style.display = which === 'account' ? '' : 'none';
+  };
+  const providerLabel = (p: string | undefined) => {
+    switch (p) {
+      case 'google': return 'Google';
+      case 'email': return 'Email + password';
+      case 'local': return 'Local nickname';
+      case 'guest': return 'Guest';
+      default: return p || '—';
+    }
+  };
+  const renderAccountSummary = () => {
+    const s = getSession();
+    if (s) {
+      // Ensure state.ts loads the current profile so getState() reflects its
+      // save (perls, high score, unlocks…) rather than whatever profile was
+      // last active. Cloud-synced accounts may have restored a different
+      // profileId than the default "Guest" state fallback.
+      loadProfile(s.profileId, s.username);
+    }
+    const st = getState();
+    const id = (id: string) => document.getElementById(id);
+    const $name = id('acct-name'); if ($name) $name.textContent = s?.username || '—';
+    const $email = id('acct-email'); if ($email) $email.textContent = s?.email || '—';
+    const $provider = id('acct-provider'); if ($provider) $provider.textContent = providerLabel(s?.authProvider);
+    const $best = id('acct-best'); if ($best) $best.textContent = `${st.highScoreMeters.toLocaleString()} m`;
+    const $coins = id('acct-coins'); if ($coins) $coins.textContent = `${st.totalCoins.toLocaleString()} 🦪`;
+    const $runs = id('acct-runs'); if ($runs) $runs.textContent = `${st.runsPlayed.toLocaleString()}`;
+    const $maps = id('acct-maps'); if ($maps) $maps.textContent = `${st.unlockedMaps?.length || 0} / ${MAPS.length}`;
+    const $skins = id('acct-skins'); if ($skins) $skins.textContent = `${st.ownedSkins?.length || 0} / ${SKINS.length}`;
+    const badgeTitles = (st.badges || []).map((id) => BADGES.find((b) => b.id === id)?.icon || '').filter(Boolean);
+    const $badges = id('acct-badges');
+    if ($badges) $badges.textContent = badgeTitles.length ? badgeTitles.join('  ') : 'No badges yet — finish a run over 50 m to earn your first!';
+  };
+  const openAccount = () => {
+    renderAccountSummary();
+    setAuthView('account');
+    if (authModal) authModal.style.display = 'flex';
+  };
   const loadGoogleScript = async () => {
     if (window.google?.accounts?.id) return;
     if (!window.__sealGoogleScriptPromise) {
@@ -326,6 +370,7 @@ function setupEntry() {
   };
   const openAuth = (m: 'login' | 'signup') => {
     setAuthMode(m);
+    setAuthView('guest');
     const s = getSession();
     if (authName && s && !s.isGuest) authName.value = s.username;
     if (authEmail && s?.email) authEmail.value = s.email;
@@ -383,13 +428,17 @@ function setupEntry() {
   });
 
   document.getElementById('login-btn')?.addEventListener('click', () => openAuth('login'));
+  document.getElementById('acct-play')?.addEventListener('click', () => { closeAuth(); showGame(); });
+  document.getElementById('acct-logout')?.addEventListener('click', () => {
+    try { cloudLogout(); } catch { /* ignore */ }
+    try { localLogout(); } catch { /* ignore */ }
+    refreshAccountUI();
+    openAuth('login');
+  });
   accountBtn?.addEventListener('click', () => {
     const s = getSession();
     if (isCloudLoggedIn() && s && !s.isGuest) {
-      if (window.confirm(`Signed in as ${s.username} (synced across devices). Log out on this device?`)) {
-        cloudLogout();
-        refreshAccountUI();
-      }
+      openAccount();
     } else {
       openAuth('login');
     }
