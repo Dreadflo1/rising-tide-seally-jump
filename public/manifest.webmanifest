@@ -1,0 +1,18 @@
+{
+  "name": "Rising Tide: Seally Jump",
+  "short_name": "Seally Jump",
+  "description": "Bounce your Hawaiian monk seal up the coast, outrun the rising tide, collect pearls, and help ocean charities.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#073b4c",
+  "theme_color": "#073b4c",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

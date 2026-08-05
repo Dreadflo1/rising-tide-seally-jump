@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta property="og:image" content="/thumbnail.png" />
+  <meta property="og:title" content="Rising Tide: Seally Jump" />
+  <meta property="og:description" content="Jump, dodge and survive the rising tide! Bounce your monk seal up the coast, collect pearls, and climb the leaderboard." />
+  <meta name="description" content="An addictive vertical jumper: help a Hawaiian monk seal climb higher than the rising tide, collect pearls, unlock badges and maps, and use special jokers like dolphin pushes and ocean protection laws." />
+  <meta name="author" content="Greenback LLC" />
+  <meta name="copyright" content="© Greenback LLC — &quot;Seally the Seal Jump Jumper&quot;. All rights reserved." />
+  <title>Rising Tide: Seally Jump</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#023E8A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Seally Jump" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <style>
+    /* ================= Landing page (top-level website only) =================
+       Shown on a normal visit; the game boots straight up inside a portal
+       iframe or the installed PWA. Fixed self-scrolling overlay. Plain CSS,
+       mobile-first, brand DA palette. */
+    :root {
+      --sky:#70D6FF; --sky2:#48CAE4; --ocean:#0077B6; --deep:#023E8A;
+      --mint:#00F5D4; --mint2:#1DD1A1; --gold:#FFD166; --coral:#FF6B6B;
+      --panel:rgba(255,255,255,.09); --stroke:rgba(255,255,255,.22);
+    }
+    body { background: var(--deep); }
+    #landing {
+      position: fixed; inset: 0; z-index: 10; display: none;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      color: #fff; text-align: center; line-height: 1.55;
+      font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+      background:
+        linear-gradient(180deg, rgba(2,62,138,.45) 0%, rgba(0,60,110,.72) 45%, rgba(2,20,44,.94) 100%),
+        url('backgrounds/landing_bg.jpg') center / cover no-repeat;
+      background-color: var(--deep);
+    }
+    #landing a { color:#fff; text-decoration:none; }
+    #landing .wrap { max-width:1100px; margin:0 auto; padding:0 20px; }
+    #landing h2.sec { font-family:'Baloo 2',sans-serif; font-weight:700; font-size:clamp(24px,5.6vw,36px); margin:0 0 6px; }
+    #landing p.sub { font-size:clamp(14px,3.4vw,17px); opacity:.85; margin:0 0 30px; }
+    #landing section { padding:56px 0; }
+    #landing section + section { border-top:1px solid rgba(255,255,255,.07); }
+
+    /* ---- Header ---- */
+    #landing .hdr { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
+      padding:12px 18px; background:linear-gradient(180deg, rgba(2,20,44,.72), rgba(2,20,44,0)); backdrop-filter:blur(8px); }
+    #landing .brand { display:flex; align-items:center; gap:9px; }
+    #landing .brand img { width:34px; height:34px; filter:drop-shadow(0 3px 5px rgba(0,0,0,.4)); }
+    #landing .brand b { font-family:'Baloo 2',sans-serif; font-weight:700; font-size:15px; text-align:left; line-height:1; }
+    #landing .brand b span { color:var(--gold); display:block; font-size:11px; letter-spacing:1px; }
+    #landing .navbtns { display:flex; gap:8px; }
+    #landing .navbtn { font-family:'Nunito',sans-serif; font-weight:800; font-size:13px; color:#eaffff; cursor:pointer;
+      background:rgba(255,255,255,.16); border:1px solid var(--stroke); border-radius:999px; padding:8px 15px; }
+    #landing .navbtn.primary { background:var(--gold); color:var(--deep); border-color:transparent; }
+
+    /* ---- Buttons ---- */
+    #landing .btn { font-family:'Baloo 2',sans-serif; font-weight:700; border:none; cursor:pointer; color:var(--deep);
+      border-radius:18px; transition:transform .08s, box-shadow .08s; }
+    #landing .btn:active { transform:translateY(3px); }
+    #landing .btn-lg { font-size:20px; padding:17px 34px; }
+    #landing .btn-play { background:var(--mint); box-shadow:0 6px 0 var(--mint2); }
+    #landing .btn-play:active { box-shadow:0 3px 0 var(--mint2); }
+    #landing .btn-ghost { background:var(--sky); box-shadow:0 6px 0 var(--ocean); }
+    #landing .btn-ghost:active { box-shadow:0 3px 0 var(--ocean); }
+    #landing .cta { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+
+    /* ---- HERO (first fold) ---- */
+    #landing .hero { min-height:calc(100vh - 60px); display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:24px 20px 40px; }
+    #landing .hero-seal { width:clamp(120px,26vw,180px); aspect-ratio:1; margin-bottom:6px;
+      filter:drop-shadow(0 14px 22px rgba(0,0,0,.45)); animation:bob 2.6s ease-in-out infinite; }
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+    #landing .logo1,#landing .logo2 { font-family:'Baloo 2',sans-serif; font-weight:700; line-height:1; letter-spacing:1px;
+      text-transform:uppercase; text-shadow:0 4px 0 rgba(2,62,138,.8),0 1px 1px rgba(255,255,255,.35); }
+    #landing .logo1 { font-size:clamp(38px,10vw,74px); }
+    #landing .logo2 { font-size:clamp(28px,7.5vw,56px); color:var(--gold); margin-top:2px; }
+    #landing .tagline { font-size:clamp(16px,4vw,22px); font-weight:700; margin:18px auto 26px; max-width:22ch; }
+    #landing .hero .cta { margin-bottom:14px; }
+    #landing .charity { font-size:13px; color:#c9f7d9; margin-top:6px; }
+    #landing .scroll-hint { margin-top:26px; font-size:22px; opacity:.7; animation:bob 2s ease-in-out infinite; }
+
+    /* nickname save card */
+    #landing .save-card { background:#fff; color:var(--deep); border-radius:20px; padding:16px 16px 18px; max-width:420px;
+      margin:22px auto 0; box-shadow:0 16px 34px rgba(0,0,0,.34); text-align:left; }
+    #landing .save-card label { font-weight:800; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#5b7a95; }
+    #landing .save-row { display:flex; gap:8px; margin-top:8px; }
+    #landing .save-row input { flex:1; min-width:0; padding:12px 14px; border-radius:13px; border:2px solid #dfe8ef;
+      background:#f4f8fb; font-family:'Nunito',sans-serif; font-weight:700; font-size:16px; color:var(--deep); }
+    #landing .save-row input:focus { outline:none; border-color:var(--ocean); }
+    #landing .save-row button { background:var(--mint); color:var(--deep); font-family:'Baloo 2',sans-serif; font-weight:700;
+      font-size:14px; border:none; border-radius:13px; padding:0 16px; box-shadow:0 4px 0 var(--mint2); cursor:pointer; white-space:nowrap; }
+
+    /* ---- MEDIA SHOWCASE (main image + thumbnails) ---- */
+    #landing .stage { position:relative; max-width:340px; margin:0 auto 16px; }
+    #landing .stage img.main { width:100%; border-radius:20px; border:2px solid var(--stroke);
+      box-shadow:0 18px 40px rgba(0,0,0,.5); display:block; background:#0b3d5c; }
+    #landing .stage .nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%;
+      border:1px solid var(--stroke); background:rgba(2,20,44,.6); color:#fff; font-size:26px; line-height:1; cursor:pointer; backdrop-filter:blur(4px); }
+    #landing .stage .prev { left:-14px; } #landing .stage .next { right:-14px; }
+    #landing .thumbs { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    #landing .thumbs img { width:64px; height:64px; object-fit:cover; border-radius:12px; cursor:pointer;
+      border:2px solid transparent; opacity:.62; transition:opacity .15s, transform .15s, border-color .15s; }
+    #landing .thumbs img:hover { opacity:1; transform:translateY(-2px); }
+    #landing .thumbs img.active { opacity:1; border-color:var(--mint); box-shadow:0 0 0 2px rgba(0,245,212,.35); }
+
+    /* ---- Cards / grids ---- */
+    #landing .grid2 { display:grid; grid-template-columns:1fr; gap:16px; max-width:760px; margin:0 auto; text-align:left; }
+    @media (min-width:640px){ #landing .grid2 { grid-template-columns:1fr 1fr; } }
+    #landing .card { background:var(--panel); border:1px solid var(--stroke); border-radius:18px; padding:18px 20px; backdrop-filter:blur(3px); }
+    #landing .card .ic { font-size:26px; margin-bottom:8px; }
+    #landing .card h3 { font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 6px; }
+    #landing .card p { font-size:14px; opacity:.9; margin:0; }
+
+    /* ---- Controls / quick start ---- */
+    #landing .keys { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; align-items:center; }
+    #landing .key { min-width:48px; height:48px; padding:0 14px; display:inline-flex; align-items:center; justify-content:center;
+      font-family:'Baloo 2',sans-serif; font-weight:700; font-size:20px; color:#fff; background:rgba(255,255,255,.12);
+      border:1px solid var(--stroke); border-bottom-width:4px; border-radius:12px; }
+    #landing .keys .plus { opacity:.6; }
+    #landing .ctrl-note { margin-top:16px; font-size:14px; opacity:.85; }
+
+    /* ---- Ambiance masonry ---- */
+    #landing .ambiance { columns:2; column-gap:12px; max-width:800px; margin:0 auto; }
+    #landing .ambiance img { width:100%; margin:0 0 12px; display:block; border-radius:14px;
+      border:1px solid rgba(255,255,255,.15); box-shadow:0 8px 20px rgba(0,0,0,.42); break-inside:avoid; }
+    @media (min-width:760px){ #landing .ambiance { columns:3; } }
+
+    /* ---- Skins ---- */
+    #landing .skins { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; max-width:820px; margin:0 auto; }
+    #landing .skin { background:var(--panel); border:1px solid var(--stroke); border-radius:16px; padding:14px 10px 12px; }
+    #landing .skin img { width:82px; height:82px; object-fit:contain; filter:drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
+    #landing .skin .name { font-family:'Baloo 2',sans-serif; font-size:15px; margin-top:6px; }
+    #landing .skin .price { font-size:12px; color:var(--gold); margin-top:2px; }
+
+    /* ---- Community soon ---- */
+    #landing .soon { display:inline-block; background:rgba(255,255,255,.12); border:1px dashed rgba(255,255,255,.42);
+      border-radius:16px; padding:14px 20px; font-size:14px; max-width:48ch; }
+    /* ---- Leaderboard ---- */
+    #landing .lb-tabs { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:0 auto 14px; }
+    #landing .lb-tab { font-family:'Nunito',sans-serif; font-weight:800; font-size:13px; color:#eaffff; cursor:pointer;
+      background:rgba(255,255,255,.12); border:1px solid var(--stroke); border-radius:999px; padding:8px 15px; }
+    #landing .lb-tab.active { background:var(--gold); color:var(--deep); border-color:transparent; }
+    #landing .lb { max-width:460px; margin:0 auto; text-align:left; background:var(--panel);
+      border:1px solid var(--stroke); border-radius:16px; overflow:hidden; }
+    #landing .lb-row { display:flex; align-items:center; gap:12px; padding:11px 16px;
+      border-bottom:1px solid rgba(255,255,255,.08); font-size:15px; }
+    #landing .lb-row:last-child { border-bottom:none; }
+    #landing .lb-row.me { background:rgba(0,245,212,.15); }
+    #landing .lb-rank { width:38px; font-family:'Baloo 2',sans-serif; font-weight:700; color:var(--gold); }
+    #landing .lb-name { flex:1; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #landing .lb-m { font-family:'Baloo 2',sans-serif; font-weight:700; color:var(--mint); }
+    #landing .lb-empty { padding:20px; text-align:center; opacity:.8; font-size:14px; }
+
+    /* ---- Final CTA + footer ---- */
+    #landing .final { text-align:center; }
+    #landing .foot { padding:26px 20px 40px; text-align:center; font-size:12px; color:#cfe6f2; }
+    #landing .socials { display:flex; gap:12px; justify-content:center; margin-bottom:14px; }
+    #landing .socials a { width:44px; height:44px; display:grid; place-items:center; border-radius:50%; font-size:20px;
+      background:rgba(255,255,255,.16); border:1px solid var(--stroke); }
+    #landing .foot .legal a { color:#fff; }
+    /* ---- Cloud account modal ---- */
+    #landing .auth-modal { position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
+      background:rgba(2,20,44,.72); padding:20px; }
+    #landing .auth-card { background:#fff; color:var(--deep); width:100%; max-width:380px; border-radius:22px;
+      padding:24px 22px; box-shadow:0 20px 50px rgba(0,0,0,.45); position:relative; text-align:center; }
+    #landing .auth-close { position:absolute; top:10px; right:14px; background:none; border:none; font-size:20px; color:#5b7a95; cursor:pointer; }
+    #landing .auth-card h3 { font-family:'Baloo 2',sans-serif; font-size:24px; margin:2px 0 4px; }
+    #landing .auth-sub { font-size:13px; color:#5b7a95; margin-bottom:16px; }
+    #landing .auth-google-host { display:flex; justify-content:center; min-height:44px; margin-bottom:10px; }
+    #landing .auth-google-note { font-size:12px; color:#5b7a95; min-height:18px; margin-bottom:10px; }
+    #landing .auth-divider { display:flex; align-items:center; gap:10px; margin:8px 0 14px; color:#7a93a8; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+    #landing .auth-divider::before, #landing .auth-divider::after { content:''; flex:1; height:1px; background:#dfe8ef; }
+    #landing .auth-card input { width:100%; padding:13px 14px; margin-bottom:10px; border-radius:13px; border:2px solid #dfe8ef;
+      background:#f4f8fb; font-family:'Nunito',sans-serif; font-weight:700; font-size:16px; color:var(--deep); }
+    #landing .auth-card input:focus { outline:none; border-color:var(--ocean); }
+    #landing .auth-card input.hidden { display:none; }
+    #landing .auth-err { color:#d1495b; font-size:13px; min-height:18px; margin-bottom:6px; font-weight:700; }
+    #landing .auth-primary { width:100%; }
+    #landing .auth-switch { margin-top:14px; font-size:13px; color:#5b7a95; }
+    #landing .auth-switch a { color:var(--ocean); font-weight:800; }
+    #landing .auth-hint { margin-top:10px; font-size:12px; color:#5b7a95; }
+  </style>
+
+  <!-- Only load the GameDistribution SDK when served FROM a gamedistribution.com
+       host (their CDN / review iframe). Its anti-piracy guard would otherwise
+       force-redirect players off our own domain. On our domain: no SDK, no GD ads
+       (premium/self-hosted version); src/ads.ts free-replays with no SDK. -->
+  <script>
+    window.GD_OPTIONS = {
+      gameId: '62e58a7f3fa54dabb434af760a9c6b72',
+      onEvent: function (event) {
+        window.dispatchEvent(new CustomEvent('gm-sdk-event', { detail: event }));
+      },
+    };
+    var onGameDistribution = /(^|\.)gamedistribution\.com$/i.test(location.hostname);
+    if (onGameDistribution && window.GD_OPTIONS.gameId && window.GD_OPTIONS.gameId !== 'YOUR_GAMEDISTRIBUTION_ID') {
+      (function (a, b, c) {
+        var d = a.getElementsByTagName(b)[0];
+        if (!a.getElementById(c)) {
+          a = a.createElement(b);
+          a.id = c;
+          a.src = 'https://html5.api.gamedistribution.com/main.min.js';
+          d.parentNode.insertBefore(a, d);
+        }
+      })(document, 'script', 'gamedistribution-jssdk');
+    }
+  </script>
+</head>
+<body>
+  <div id="landing">
+    <!-- HEADER -->
+    <div class="hdr">
+      <div class="brand">
+        <img src="sprites/player_seal.png" alt="" />
+        <b>RISING TIDE<span>SEALLY JUMP</span></b>
+      </div>
+      <div class="navbtns">
+        <button id="login-btn" class="navbtn">Log In</button>
+        <button id="account-btn" class="navbtn primary">Account</button>
+      </div>
+    </div>
+
+    <!-- 1. HERO -->
+    <section class="hero">
+      <img class="hero-seal" src="sprites/player_seal.png" alt="Seally the Hawaiian monk seal" />
+      <div class="logo1">Rising Tide</div>
+      <div class="logo2">Seally Jump</div>
+      <p class="tagline">Jump, dodge, and survive the rising tide!</p>
+      <div class="cta">
+        <button id="play-btn" class="btn btn-play btn-lg">▶ Play Now</button>
+        <button id="install-btn" class="btn btn-ghost btn-lg">📲 Get on Mobile</button>
+      </div>
+      <p class="charity">💙 20% of revenue supports The Ocean Cleanup</p>
+      <div class="save-card">
+        <label>Quick local play</label>
+        <div class="save-row">
+          <input id="nickname-input" type="text" placeholder="Nickname for this device" maxlength="16" autocomplete="off" />
+          <button id="save-play-btn">PLAY NOW</button>
+        </div>
+        <p class="auth-hint">Use <b>Log In</b> for cross-device sync with Google or email.</p>
+      </div>
+      <div class="scroll-hint">▾</div>
+    </section>
+
+    <!-- 2. GAMEPLAY & MEDIA SHOWCASE -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">See it in action</h2>
+        <p class="sub">Tap a thumbnail to explore the gameplay.</p>
+        <div class="stage">
+          <button class="nav prev" id="mg-prev" aria-label="Previous">‹</button>
+          <img class="main" id="mg-main" src="screens/shot1.jpg" alt="Rising Tide gameplay" />
+          <button class="nav next" id="mg-next" aria-label="Next">›</button>
+        </div>
+        <div class="thumbs" id="mg-thumbs">
+          <img data-src="screens/shot1.jpg" src="screens/shot1.jpg" class="active" alt="Lagoon" onerror="this.style.display='none'" />
+          <img data-src="screens/shot2.jpg" src="screens/shot2.jpg" alt="Reef" onerror="this.style.display='none'" />
+          <img data-src="screens/shot3.jpg" src="screens/shot3.jpg" alt="Storm" onerror="this.style.display='none'" />
+          <img data-src="mockups/mockup-1.jpg" src="mockups/mockup-1.jpg" alt="On mobile" onerror="this.style.display='none'" />
+          <img data-src="mockups/mockup-2.jpg" src="mockups/mockup-2.jpg" alt="On mobile" onerror="this.style.display='none'" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. KEY FEATURES -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">Key features</h2>
+        <p class="sub">Simple to learn, hard to master.</p>
+        <div class="grid2">
+          <div class="card"><div class="ic">🌊</div><h3>Chasing tide</h3><p>The water rises and speeds up the higher you climb — one slip and it gets you.</p></div>
+          <div class="card"><div class="ic">🐢</div><h3>Turtles &amp; power-ups</h3><p>Ride sea turtles, spring off coral bouncers, grab shields and dolphin boosts.</p></div>
+          <div class="card"><div class="ic">🗺️</div><h3>Skins &amp; 3 maps</h3><p>Unlock 5 seal costumes and 3 maps that each play differently.</p></div>
+          <div class="card"><div class="ic">🏆</div><h3>Medals &amp; leaderboard</h3><p>Earn 12 medals, chain pearl combos and climb the global ranks.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. CONTROLS / QUICK START -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">How to play</h2>
+        <p class="sub">Steer left and right — Seally bounces automatically.</p>
+        <div class="keys">
+          <span class="key">←</span>
+          <span class="key">→</span>
+          <span class="plus">or</span>
+          <span class="key">👆 Tap &amp; hold</span>
+        </div>
+        <p class="ctrl-note">Bounce off platforms, grab pearls, stay ahead of the tide. That's it.</p>
+      </div>
+    </section>
+
+    <!-- 5. AMBIANCE / COMMUNITY -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">Made to be shared</h2>
+        <p class="sub">Connection &amp; challenge, one jump at a time.</p>
+        <div class="grid2" style="margin-bottom:24px">
+          <div class="card"><div class="ic">🤝</div><h3>Better together</h3><p>Pass the phone, dare a friend to beat your height, and watch “one more jump” turn into a whole evening.</p></div>
+          <div class="card"><div class="ic">🔥</div><h3>Climb the challenge</h3><p>Every run is a record to chase. Outrun the tide longer than your crew for the top spot.</p></div>
+        </div>
+        <div class="ambiance">
+          <img src="ambiance/ambiance-1.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+          <img src="ambiance/ambiance-2.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+          <img src="ambiance/ambiance-3.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+          <img src="ambiance/ambiance-4.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+          <img src="ambiance/ambiance-5.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+          <img src="ambiance/ambiance-6.jpg" alt="Friends playing together" loading="lazy" onerror="this.style.display='none'" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. SKINS & GOODIES -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">🦭 Skins &amp; goodies</h2>
+        <p class="sub">Collect pearls in-game to unlock costumes for Seally.</p>
+        <div class="skins">
+          <div class="skin"><img src="sprites/player_seal.png" alt="Seally" /><div class="name">Seally</div><div class="price">Free</div></div>
+          <div class="skin"><img src="sprites/seal_skin_gold.png" alt="Gold Seally" /><div class="name">Gold Seally</div><div class="price">700 🦪</div></div>
+          <div class="skin"><img src="sprites/seal_skin_violet.png" alt="Violet Seally" /><div class="name">Violet Seally</div><div class="price">1200 🦪</div></div>
+          <div class="skin"><img src="sprites/seal_skin_kelp.png" alt="Kelp Seally" /><div class="name">Kelp Seally</div><div class="price">1500 🦪</div></div>
+          <div class="skin"><img src="sprites/seal_skin_hawaii.png" alt="Hawaiian Seally" /><div class="name">Hawaiian Seally</div><div class="price">1700 🦪</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. GLOBAL LEADERBOARD -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">🏆 Global leaderboard</h2>
+        <p class="sub">Scores are ranked per map — pick yours.</p>
+        <div class="lb-tabs" id="lb-tabs">
+          <button class="lb-tab active" data-map="lagoon">🏝️ Lagoon</button>
+          <button class="lb-tab" data-map="reef">🐠 Reef</button>
+          <button class="lb-tab" data-map="storm">⛈️ Storm</button>
+        </div>
+        <div class="lb" id="lb-list"><div class="lb-empty">Loading…</div></div>
+        <p class="ctrl-note" style="margin-top:14px">Use Account to keep your progress synced across devices with Google or email.</p>
+      </div>
+    </section>
+
+    <!-- 8. FINAL CTA -->
+    <section class="final">
+      <div class="wrap">
+        <h2 class="sec">Ready to outrun the tide?</h2>
+        <p class="sub">Free to play, right in your browser.</p>
+        <div class="cta"><button id="play-btn-2" class="btn btn-play btn-lg">▶ Play Now</button></div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <div class="foot">
+      <div class="socials">
+        <a class="soc" data-soc="TikTok" href="#" aria-label="TikTok">🎵</a>
+        <a class="soc" data-soc="Instagram" href="#" aria-label="Instagram">📸</a>
+        <a class="soc" data-soc="Discord" href="#" aria-label="Discord">💬</a>
+      </div>
+      <div class="legal">
+        &ldquo;Seally the Seal Jump Jumper&rdquo; &copy; Greenback LLC &nbsp;·&nbsp;
+        <a href="https://theoceancleanup.com" target="_blank" rel="noopener">The Ocean Cleanup</a>
+      </div>
+    </div>
+
+    <!-- Cloud account modal (cross-device sync) -->
+    <div id="auth-modal" class="auth-modal">
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+        <h3 id="auth-title">Log in</h3>
+        <p class="auth-sub">Save your progress &amp; leaderboard spot across devices with Google or email.</p>
+        <div id="auth-google" class="auth-google-host"></div>
+        <div id="auth-google-note" class="auth-google-note"></div>
+        <div class="auth-divider">or use email</div>
+        <input id="auth-name" class="hidden" type="text" placeholder="Display name" maxlength="16" autocomplete="nickname" />
+        <input id="auth-email" type="email" placeholder="Email address" autocomplete="email username" />
+        <input id="auth-pass" type="password" placeholder="Password (4+ characters)" autocomplete="current-password" />
+        <div class="auth-err" id="auth-err"></div>
+        <button id="auth-submit" class="btn btn-play auth-primary">Log in</button>
+        <div class="auth-switch"><span id="auth-switch-text">No account yet?</span> <a href="#" id="auth-switch-link">Create account</a></div>
+        <div class="auth-hint">Google sign-in appears automatically when `GOOGLE_CLIENT_ID` is configured.</div>
+      </div>
+    </div>
+  </div>
+  <div id="game"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

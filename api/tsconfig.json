@@ -1,0 +1,14 @@
+{
+  "//": "Vercel type-checks serverless functions in api/ separately from the frontend (src/) build. The root tsconfig restricts types to 'vite/client' and only includes src, so this self-contained config gives the Node functions their runtime globals (process, etc.).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

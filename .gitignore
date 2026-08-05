@@ -1,0 +1,9 @@
+node_modules
+.pnpm-vs
+dist
+.vercel
+.env
+.env.local
+.env*.local
+
+.vercel
