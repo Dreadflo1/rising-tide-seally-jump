@@ -29,6 +29,13 @@ const MAX_HORIZONTAL_OFFSET = 118;
 
 const MOVE_SPEED = 280; // player horizontal move speed (design px/s)
 
+// ---- Progression zones (metres) ----
+// Onboarding: safe, teaches the jump + item shapes. Flow: ramps gap/hazards
+// smoothly. Mastery: fullest mix, but the tide speed is capped so the challenge
+// comes from placement + timing, not an unsurvivable speed wall.
+const ONBOARDING_M = 300;
+const FLOW_M = 800;
+
 // ---- Tide tuning (design-pixel units) ----
 // The tide is the run's pressure. It rises SMOOTHLY at a speed and is NEVER
 // snapped to the player's position (that made the water "jump" when you
@@ -37,12 +44,26 @@ const MOVE_SPEED = 280; // player horizontal move speed (design px/s)
 // screen. So a fast climber pulls ahead and the tide speeds up to chase;
 // slowing/stopping lets it rise into view and drown you; and the time ramp
 // makes even a perfect climb unsurvivable eventually.
-// (+8% overall vs the previous tuning — the whole tide runs faster.)
-const TIDE_BASE_SPEED = 26; // constant base rise (design px/s)
-const TIDE_TIME_ACCEL = 0.86; // base rise gained per second of the run
-const TIDE_TARGET_BELOW_SCREEN = -10; // where it "wants" to sit vs the screen bottom (− = just into view)
-const TIDE_CHASE_GAIN = 0.65; // extra rise speed per design px it lags below that target
-const TIDE_MAX_SPEED = 281; // cap so it can never rocket up absurdly
+//
+// Player climbs at ~85–95 design px/s on a steady bounce. The cap below (118)
+// stays ~1.25× that climb rate, so a skillful player can always outclimb the
+// water when moving cleanly. The chase gain (0.24) is gentle: a fast opening
+// staircase / springs burst no longer rockets the tide to 3× climb speed.
+//
+// Two safety rails on the opening:
+//   - The tide starts ~120 design px DEEPER below the first platform, so even
+//     a slow first bounce isn't an instant drown.
+//   - A 3 s opening GRACE clamps the effective rise speed to 6 design px/s and
+//     ALSO disables chase entirely in that window, guaranteeing a clean start
+//     even if you mis-time the very first jump.
+const TIDE_BASE_SPEED = 22; // constant base rise (design px/s)
+const TIDE_TIME_ACCEL = 0.48; // base rise gained per second of the run
+const TIDE_TARGET_BELOW_SCREEN = -20; // where it "wants" to sit vs the screen bottom (− = just into view)
+const TIDE_CHASE_GAIN = 0.24; // extra rise speed per design px it lags below that target
+const TIDE_MAX_SPEED = 118; // cap: firm pressure, but never an un-outclimbable rocket
+const TIDE_START_EXTRA_PADDING_DESIGN = 120; // start even deeper for the first jumps
+const TIDE_START_GRACE_MS = 3000; // opening seconds where the tide barely moves
+const TIDE_START_GRACE_MAX_SPEED = 6; // max design px/s during the grace window
 
 export default class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -61,6 +82,7 @@ export default class GameScene extends Phaser.Scene {
   private baseTideSpeed = TIDE_BASE_SPEED;
   private runStartTime = 0;
   private tideSlowUntil = 0;
+  private tideGraceUntil = 0; // opening grace: tide held gentle so the first jumps are safe
   private tideSprite!: Phaser.GameObjects.TileSprite;
 
   private highestY = 0; // smallest y reached (highest point)
@@ -72,6 +94,9 @@ export default class GameScene extends Phaser.Scene {
   private lastPlatformY = 0;
   private lastPlatformX = 0;
   private difficultyLevel = 0;
+  // Rhythm counter: 0,1 = calm steps, 2 = "technical" step (bigger gap/offset,
+  // where special platforms + hazards concentrate). Cycles 0→1→2→0.
+  private stepInPattern = 0;
 
   private invulnerableUntil = 0;
   private slipperyUntil = 0;
@@ -166,6 +191,7 @@ export default class GameScene extends Phaser.Scene {
     // full reset block further down (and the revive branch) still applies too.
     this.scoreMeters = 0;
     this.difficultyLevel = 0;
+    this.stepInPattern = 0;
 
     // Equal footing: a FRESH run always starts with 0 lives (persisted/bought
     // lives never carry in), so every player begins the same. Hearts collected
@@ -198,8 +224,12 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.hazards, this.handleHazard, undefined, this);
     this.physics.add.overlap(this.player, this.hearts, this.handleHeart, undefined, this);
 
-    // Tide (rising ocean)
-    this.tideY = h + S(60);
+    // Tide (rising ocean). Starts well below the opening platform so a slow
+    // first jump isn't an instant drown. (The extra padding means even a
+    // graceless first bounce — or the player immediately stalling on the
+    // opening platform — still has headroom before the first chase surge kicks
+    // in after the grace window.)
+    this.tideY = h + S(230) + S(TIDE_START_EXTRA_PADDING_DESIGN);
     this.tideSprite = this.add
       .tileSprite(w / 2, this.tideY, w, S(260), 'bg_storm')
       .setDepth(15)
@@ -248,6 +278,7 @@ export default class GameScene extends Phaser.Scene {
     this.bankedCoins = 0;
     this.tideSpeed = this.baseTideSpeed;
     this.runStartTime = this.time.now;
+    this.tideGraceUntil = this.time.now + TIDE_START_GRACE_MS;
     this.slipperyUntil = 0;
     this.lastAnnouncedLevel = 1;
 
@@ -299,110 +330,169 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Picks a vertical gap (in DESIGN pixels) that is always reachable with a normal bounce. */
-  private pickGapDesign(): number {
-    // Difficulty nudges the gap toward the safe maximum but never past it.
-    const diffT = Math.min(this.difficultyLevel / 10, 1);
-    const target = Phaser.Math.Linear(MIN_GAP, MAX_SAFE_GAP, diffT);
-    return Phaser.Math.Between(Math.round(target - 12), Math.round(Math.min(target + 12, MAX_SAFE_GAP)));
+  private zoneFor(m: number): 0 | 1 | 2 {
+    return m < ONBOARDING_M ? 0 : m < FLOW_M ? 1 : 2;
   }
 
-  /** Picks a horizontal offset (DESIGN pixels, signed) from the previous platform that stays reachable. */
-  private pickHorizontalOffsetDesign(gapDesign: number): number {
-    // Tighter vertical gaps leave more "budget" for horizontal drift, and
-    // vice versa — this keeps every jump physically completable.
+  /** Soft outer glow so every interactable reads at a glance (Rule of
+   *  Distinction). GPU-only (WebGL); silently no-ops on the Canvas renderer. */
+  private glow(obj: any, color: number, strength = 4) {
+    try {
+      obj.preFX?.addGlow?.(color, strength, 0);
+    } catch {
+      /* Canvas renderer — no preFX pipeline */
+    }
+  }
+
+  /** Vertical gap (DESIGN px). Zone-based + rhythmic: onboarding is easy and
+   *  uniform; the flow zone ramps the ceiling; "technical" steps reach toward the
+   *  safe max while the two calm steps between them stay comfortable. Always
+   *  <= MAX_SAFE_GAP so every jump is completable with a normal bounce. */
+  private pickGapDesign(technical: boolean): number {
+    const m = this.scoreMeters;
+    let lo: number;
+    let hi: number;
+    if (m < ONBOARDING_M) {
+      lo = MIN_GAP;
+      hi = MIN_GAP + 14;
+    } else if (m < FLOW_M) {
+      const t = (m - ONBOARDING_M) / (FLOW_M - ONBOARDING_M);
+      lo = MIN_GAP + 10;
+      hi = Phaser.Math.Linear(MIN_GAP + 18, MAX_SAFE_GAP * 0.9, t);
+    } else {
+      lo = MIN_GAP + 18;
+      hi = MAX_SAFE_GAP;
+    }
+    if (!technical) hi = Phaser.Math.Linear(lo, hi, 0.5); // calm steps stay gentle
+    return Phaser.Math.Between(Math.round(lo), Math.round(Math.max(lo, hi)));
+  }
+
+  /** Horizontal offset (DESIGN px, signed). Calm steps drift little (near-straight
+   *  climbs); technical steps use more of the reachable width. */
+  private pickHorizontalOffsetDesign(gapDesign: number, technical: boolean): number {
     const gapRatio = Phaser.Math.Clamp(gapDesign / MAX_SAFE_GAP, 0, 1);
-    const maxOffset = Phaser.Math.Linear(MAX_HORIZONTAL_OFFSET, MAX_HORIZONTAL_OFFSET * 0.55, gapRatio);
+    let maxOffset = Phaser.Math.Linear(MAX_HORIZONTAL_OFFSET, MAX_HORIZONTAL_OFFSET * 0.55, gapRatio);
+    if (!technical) maxOffset *= 0.5;
     return Phaser.Math.Between(-Math.round(maxOffset), Math.round(maxOffset));
   }
 
-  /** Generates the next platform above lastPlatformY/X, picking a guaranteed-reachable gap + offset. */
+  /** Generates the next platform above lastPlatformY/X on a 2-calm-then-1-technical
+   *  rhythm, always with a guaranteed-reachable gap + offset. */
   private generateNextPlatform() {
-    const gapDesign = this.pickGapDesign();
-    const offsetDesign = this.pickHorizontalOffsetDesign(gapDesign);
+    const technical = this.stepInPattern === 2;
+    this.stepInPattern = (this.stepInPattern + 1) % 3;
+    const gapDesign = this.pickGapDesign(technical);
+    const offsetDesign = this.pickHorizontalOffsetDesign(gapDesign, technical);
     const w = this.scale.width;
     const margin = S(46);
     const y = this.lastPlatformY - S(gapDesign);
     const x = Phaser.Math.Clamp(this.lastPlatformX + S(offsetDesign), margin, w - margin);
-    this.generatePlatformAt(x, y);
+    this.generatePlatformAt(x, y, technical);
   }
 
-  private generatePlatformAt(x: number, y: number) {
+  private generatePlatformAt(x: number, y: number, technical = false) {
     const w = this.scale.width;
     const margin = S(46);
+    const zone = this.zoneFor(this.scoreMeters);
 
-    const r = Math.random();
+    // Platform kind by zone + rhythm. Onboarding teaches on solid ground (normal,
+    // the odd spring). Special mechanics (break/move) appear from the flow zone
+    // and mostly on technical steps, so the two calm steps stay dependable.
     let kind: PlatKind = 'normal';
-    const diff = Math.min(this.difficultyLevel, 10);
-    if (r < 0.1 + diff * 0.008) kind = 'break';
-    else if (r < 0.24 + diff * 0.008) kind = 'move';
-    else if (r < 0.36) kind = 'spring';
+    const r = Math.random();
+    if (zone === 0) {
+      if (r < 0.14) kind = 'spring';
+    } else if (zone === 1) {
+      if (technical) {
+        if (r < 0.16) kind = 'break';
+        else if (r < 0.4) kind = 'move';
+        else if (r < 0.52) kind = 'spring';
+      } else if (r < 0.14) kind = 'spring';
+    } else {
+      if (technical) {
+        if (r < 0.24) kind = 'break';
+        else if (r < 0.52) kind = 'move';
+        else if (r < 0.62) kind = 'spring';
+      } else if (r < 0.16) kind = 'spring';
+      else if (r < 0.24) kind = 'move';
+    }
 
     this.spawnPlatform(x, y, kind);
 
-    // coin above, usually reachable at the apex of the bounce (tougher maps
-    // spawn more, capped so it never blankets the screen)
-    if (Math.random() < Math.min(0.85, 0.55 * this.coinMult)) {
-      const coin = this.coins.create(x + Phaser.Math.Between(-S(20), S(20)), y - S(26), 'coin_pearl');
-      coin.setScale(S(0.09));
-      coin.body.setAllowGravity(false);
-      coin.setDepth(19);
-      this.tweens.add({ targets: coin, y: coin.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+    // Pearls: far fewer than before (was up to 85% of platforms → "too many").
+    // A modest chance, and higher-value clusters sit on technical steps
+    // (risk/reward — harder jumps pay more). Each pearl gets a soft gold glow +
+    // a readable size so it's obvious at a glance.
+    const coinChance = (technical ? 0.42 : 0.22) * this.coinMult;
+    if (Math.random() < Math.min(0.5, coinChance)) {
+      const cluster = technical && Math.random() < 0.35 ? 3 : 1;
+      for (let i = 0; i < cluster; i++) {
+        const cx = Phaser.Math.Clamp(x + S((i - (cluster - 1) / 2) * 26), margin, w - margin);
+        const coin = this.coins.create(cx, y - S(30), 'coin_pearl');
+        coin.setScale(S(0.14));
+        coin.body.setAllowGravity(false);
+        coin.setDepth(19);
+        this.glow(coin, 0xffe08a, 4);
+        this.tweens.add({ targets: coin, y: coin.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      }
     }
 
-    // occasional powerup
+    // Power-ups: uncommon, now bigger with a type-coloured halo so the three
+    // kinds read apart instantly (dolphin=cyan, law=blue, shield=green).
     if (Math.random() < 0.06) {
       const kinds: PowerupData['kind'][] = ['dolphin', 'law', 'shield'];
       const k = Phaser.Utils.Array.GetRandom(kinds);
       const spriteKey = k === 'dolphin' ? 'powerup_dolphin' : k === 'law' ? 'powerup_law' : 'powerup_shield';
-      const pu = this.powerups.create(x + Phaser.Math.Between(-S(16), S(16)), y - S(42), spriteKey);
+      const pu = this.powerups.create(x + Phaser.Math.Between(-S(16), S(16)), y - S(46), spriteKey);
       pu.setData('kind', k);
-      pu.setScale(S(0.12));
+      pu.setScale(S(0.17));
       pu.body.setAllowGravity(false);
       pu.setDepth(19);
+      this.glow(pu, k === 'dolphin' ? 0x4ff0ff : k === 'law' ? 0x6db8ff : 0x7dff9e, 6);
       this.tweens.add({ targets: pu, angle: 360, duration: 3000, repeat: -1 });
     }
 
     // Heart pickup — a collectible extra life. Kept RARE and well-spaced (~110 m
-    // between hearts) so you can't top up to full in the first few metres, and
-    // only spawned while below the life cap so none are wasted.
+    // between hearts) and only while below the life cap so none are wasted.
     if (getState().lives < MAX_LIVES && this.lastHeartY - y > S(2200) && Math.random() < 0.06) {
       const heart = this.add
-        .text(x + Phaser.Math.Between(-S(18), S(18)), y - S(44), '❤️', { fontSize: `${S(22)}px` })
+        .text(x + Phaser.Math.Between(-S(18), S(18)), y - S(46), '❤️', { fontSize: `${S(26)}px` })
         .setOrigin(0.5)
         .setDepth(19);
       this.physics.add.existing(heart);
       this.hearts.add(heart as any);
       const body = heart.body as Phaser.Physics.Arcade.Body;
       body.setAllowGravity(false);
-      body.setSize(S(22), S(22));
+      body.setSize(S(24), S(24));
       this.tweens.add({ targets: heart, y: heart.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       this.lastHeartY = y;
     }
 
-    // Occasional human-caused ocean hazard — placed to the side, never
-    // blocking the only path. Three flavors, unlocked progressively:
-    // floating plastic trash (early), an oil slick that makes you slip
-    // (mid), and a poacher hurling rocks from off-screen (late).
-    // Hazard frequency now RAMPS with height so the challenge visibly grows the
-    // higher you climb (was a flat 10%). Capped so it never fully walls you in.
-    const hazChance = Math.min(0.36, (0.08 + this.difficultyLevel * 0.02) * this.hazardMult);
-    if (this.difficultyLevel > 1 && Math.random() < hazChance) {
-      const hazOffset = Phaser.Math.Between(-S(70), S(70));
-      const hx = Phaser.Math.Clamp(x + hazOffset, margin, w - margin);
-      const roll = Math.random();
-      let kind: HazardKind = 'trash';
-      if (this.scoreMeters > 300) {
-        // Past 300 m the deadlier shark & human (poacher) threats join the pool.
-        if (roll < 0.2) kind = 'shark';
-        else if (roll < 0.38) kind = 'human';
-        else if (roll < 0.55) kind = 'rock';
-        else if (roll < 0.75) kind = 'oil';
-      } else {
-        if (this.difficultyLevel > 4 && roll < 0.25) kind = 'rock';
-        else if (this.difficultyLevel > 2 && roll < 0.55) kind = 'oil';
+    // Hazards: NONE during onboarding (<300 m) so new players learn the jump
+    // safely (removes the old un-telegraphed spike). From the flow zone they
+    // appear, concentrated on technical steps, ramping with height. The deadly
+    // lunging threats (shark, poacher) hold back until the mastery zone (>800 m).
+    // Always to the side — never walling the only path.
+    if (this.scoreMeters >= ONBOARDING_M) {
+      const base = zone === 2 ? 0.16 : 0.08;
+      let hazChance = Math.min(0.34, (base + this.difficultyLevel * 0.015) * this.hazardMult);
+      if (!technical) hazChance *= 0.4; // keep the calm steps mostly clear
+      if (Math.random() < hazChance) {
+        const hazOffset = Phaser.Math.Between(-S(70), S(70));
+        const hx = Phaser.Math.Clamp(x + hazOffset, margin, w - margin);
+        const roll = Math.random();
+        let hk: HazardKind = 'trash';
+        if (this.scoreMeters > FLOW_M) {
+          if (roll < 0.2) hk = 'shark';
+          else if (roll < 0.38) hk = 'human';
+          else if (roll < 0.55) hk = 'rock';
+          else if (roll < 0.75) hk = 'oil';
+        } else {
+          if (this.difficultyLevel > 4 && roll < 0.22) hk = 'rock';
+          else if (this.difficultyLevel > 2 && roll < 0.5) hk = 'oil';
+        }
+        this.spawnHazard(hx, y - S(58), hk, w, margin);
       }
-      this.spawnHazard(hx, y - S(58), kind, w, margin);
     }
 
     this.lastPlatformY = y;
@@ -431,6 +521,15 @@ export default class GameScene extends Phaser.Scene {
       body.setVelocityX(dir * speed);
       body.setSize(S(26), S(20));
       shark.setData('kind', 'shark');
+      this.glow(shark, 0xff4d4d, 5);
+      // Telegraph: a ⚠️ flashes at the edge the shark enters from, giving the
+      // player visual lead-time before it crosses the play area.
+      const warn = this.add
+        .text(fromLeft ? S(14) : w - S(14), y, '⚠️', { fontSize: `${S(20)}px` })
+        .setOrigin(0.5)
+        .setDepth(20)
+        .setAlpha(0);
+      this.tweens.add({ targets: warn, alpha: 1, duration: 150, yoyo: true, repeat: 1, onComplete: () => warn.destroy() });
       return;
     }
 
@@ -443,6 +542,7 @@ export default class GameScene extends Phaser.Scene {
       body.setAllowGravity(false);
       body.setSize(S(24), S(24));
       human.setData('kind', 'human');
+      this.glow(human, 0xff4d4d, 4);
       this.tweens.add({
         targets: human,
         x: Phaser.Math.Clamp(x + Phaser.Math.Between(-S(55), S(55)), margin, w - margin),
@@ -490,6 +590,7 @@ export default class GameScene extends Phaser.Scene {
       body.setVelocityX(dir * speed);
       body.setSize(S(18), S(18));
       rock.setData('kind', 'rock');
+      this.glow(rock, 0xff7a3d, 4);
       this.tweens.add({ targets: rock, angle: dir * 360, duration: 900, repeat: -1 });
       return;
     }
@@ -508,10 +609,11 @@ export default class GameScene extends Phaser.Scene {
 
     // trash (default) — floating plastic debris drifting side to side.
     const hz = this.hazards.create(x, y, 'trash_hazard');
-    hz.setScale(S(0.1));
+    hz.setScale(S(0.13));
     hz.body.setAllowGravity(false);
     hz.setDepth(19);
     hz.setData('kind', 'trash');
+    this.glow(hz, 0xff7a3d, 4);
     this.tweens.add({
       targets: hz,
       x: Phaser.Math.Clamp(x + Phaser.Math.Between(-S(40), S(40)), margin, w - margin),
@@ -766,12 +868,26 @@ export default class GameScene extends Phaser.Scene {
     const elapsed = (this.time.now - this.runStartTime) / 1000;
     const viewBottom = this.cameras.main.scrollY + this.scale.height;
     const gapBelowScreen = (this.tideY - viewBottom) / S(1); // design px the tide sits below the visible bottom
-    const baseRise = this.baseTideSpeed + elapsed * TIDE_TIME_ACCEL;
-    const chase = TIDE_CHASE_GAIN * Math.max(0, gapBelowScreen - TIDE_TARGET_BELOW_SCREEN);
+    // Time-based rise is CAPPED (+80 design px/s over the base) so a long, skilful
+    // climb never becomes unsurvivable by tide speed alone — past ~800 m the
+    // pressure comes from platform placement + hazards, not a runaway wall. The
+    // chase term still lets the tide surge to catch a player who stalls.
+    const inGrace = this.time.now < this.tideGraceUntil;
+    const baseRise = this.baseTideSpeed + Math.min(80, elapsed * TIDE_TIME_ACCEL);
+    // Opening grace: disable chase entirely. This is what stops a fast opening
+    // staircase / springs burst from triggering the "3× climb" rocket flood
+    // within the first 3 s; after grace, chase is gentle again (0.24).
+    const chase = inGrace
+      ? 0
+      : TIDE_CHASE_GAIN * Math.max(0, gapBelowScreen - TIDE_TARGET_BELOW_SCREEN);
     this.tideSpeed = Math.min(TIDE_MAX_SPEED, baseRise + chase);
 
     const tideSlowActive = this.time.now < this.tideSlowUntil;
-    const effSpeed = tideSlowActive ? this.tideSpeed * 0.25 : this.tideSpeed;
+    let effSpeed = tideSlowActive ? this.tideSpeed * 0.25 : this.tideSpeed;
+    // Opening grace: clamp the effective rise to a very slow crawl, so the
+    // player can afford to miss-tune the very first bounce without being
+    // pushed off the bottom by a rising wall.
+    if (inGrace) effSpeed = Math.min(effSpeed, TIDE_START_GRACE_MAX_SPEED);
     this.tideY -= S(effSpeed) * dt;
     this.drawTide();
 
