@@ -10,6 +10,7 @@ import { initErrorReporting } from './errorReporting';
 import { login, getSession, logout as localLogout } from './auth';
 import { fetchGlobalLeaderboard, loadProfile, getState, BADGES, MAPS, SKINS } from './state';
 import { initCloudSync, cloudEmailLogin, cloudEmailSignup, cloudGoogleLogin, cloudLogout, getGoogleClientId, isCloudLoggedIn } from './cloud';
+import { initStore } from './store';
 
 interface GoogleCredentialResponse {
   credential?: string;
@@ -281,9 +282,81 @@ function setupEntry() {
     const $runs = id('acct-runs'); if ($runs) $runs.textContent = `${st.runsPlayed.toLocaleString()}`;
     const $maps = id('acct-maps'); if ($maps) $maps.textContent = `${st.unlockedMaps?.length || 0} / ${MAPS.length}`;
     const $skins = id('acct-skins'); if ($skins) $skins.textContent = `${st.ownedSkins?.length || 0} / ${SKINS.length}`;
+    const ownedBadgeIds = new Set<string>(st.badges || []);
     const badgeTitles = (st.badges || []).map((id) => BADGES.find((b) => b.id === id)?.icon || '').filter(Boolean);
     const $badges = id('acct-badges');
     if ($badges) $badges.textContent = badgeTitles.length ? badgeTitles.join('  ') : 'No badges yet — finish a run over 50 m to earn your first!';
+
+    // --- Badge chips: show all 12 badges, highlight the NEXT one to earn.
+    //   • Owned badges: normal chip, bright.
+    //   • The first non-owned badge by threshold: "next" styling (gold tint)
+    //     + a note that explains "do +X m to earn it".
+    //   • Everything else locked further down: greyed, dashed border.
+    const $badgeList = id('acct-badgelist') as HTMLDivElement | null;
+    if ($badgeList) {
+      $badgeList.innerHTML = '';
+      let nextPicked = false;
+      const sorted = [...BADGES].sort((a, b) => a.threshold - b.threshold);
+      for (const b of sorted) {
+        const chip = document.createElement('span');
+        const owned = ownedBadgeIds.has(b.id);
+        chip.className = 'badge-chip' + (owned ? '' : nextPicked ? ' locked' : ' next locked');
+        chip.textContent = `${b.icon}  ${b.name} · ${b.threshold} m`;
+        chip.title = owned ? `${b.name} earned — +${b.reward} 🦪 reward` : `${b.name} — reach ${b.threshold} m to unlock (+${b.reward} 🦪 reward)`;
+        $badgeList.appendChild(chip);
+        if (!owned && !nextPicked) nextPicked = true;
+      }
+    }
+    const $nextBadge = id('acct-nextbadge') as HTMLParagraphElement | null;
+    if ($nextBadge) {
+      const next = [...BADGES].sort((a, b) => a.threshold - b.threshold).find((b) => !ownedBadgeIds.has(b.id));
+      if (!next) {
+        $nextBadge.textContent = `All ${BADGES.length} badges collected! Legendary climb, ${s?.username || 'champion'} 🏆`;
+      } else {
+        const remaining = Math.max(0, next.threshold - st.highScoreMeters);
+        $nextBadge.textContent =
+          remaining <= 0
+            ? `Your next badge ${next.icon} ${next.name} (${next.threshold} m) is due — finish a run to claim +${next.reward} 🦪!`
+            : `Next up: ${next.icon} ${next.name} in ${remaining.toLocaleString()} m (+${next.reward} 🦪 when you hit ${next.threshold} m).`;
+      }
+    }
+
+    // --- Next skin progression: show the cheapest unlocked skin you don't
+    // own yet, with a progress bar and a clear "need X more 🦪". If every
+    // skin is owned, show a celebratory note instead.
+    const $nextSkinName = id('acct-nextskin-name') as HTMLParagraphElement | null;
+    const $nextSkinBar = id('acct-nextskin-bar') as HTMLElement | null;
+    const $nextSkinNote = id('acct-nextskin-note') as HTMLParagraphElement | null;
+    const ownedSkins = new Set<string>(st.ownedSkins || ['seal']);
+    const nextSkin = [...SKINS].filter((k) => !ownedSkins.has(k.id)).sort((a, b) => a.cost - b.cost)[0];
+    if ($nextSkinName) {
+      if (!nextSkin) {
+        $nextSkinName.textContent = `All ${SKINS.length} skins unlocked! ✨`;
+      } else {
+        $nextSkinName.textContent = nextSkin.cost === 0 ? nextSkin.name : `${nextSkin.name} · ${nextSkin.cost.toLocaleString()} 🦪`;
+      }
+    }
+    if ($nextSkinBar) {
+      if (!nextSkin || nextSkin.cost === 0) {
+        $nextSkinBar.style.width = nextSkin ? '100%' : '100%';
+      } else {
+        const pct = Phaser.Math.Clamp((st.totalCoins / nextSkin.cost) * 100, 0, 100);
+        $nextSkinBar.style.width = `${pct.toFixed(0)}%`;
+      }
+    }
+    if ($nextSkinNote) {
+      if (!nextSkin) {
+        $nextSkinNote.textContent = 'You own every outfit Seally sells. Time to show off on the leaderboard 🦭!';
+      } else if (nextSkin.cost === 0) {
+        $nextSkinNote.textContent = `${nextSkin.name} is free — open the in-game Skins panel to equip it.`;
+      } else if (st.totalCoins >= nextSkin.cost) {
+        $nextSkinNote.textContent = `You already have enough! You can buy ${nextSkin.name} right now in the Skins shop.`;
+      } else {
+        const need = nextSkin.cost - st.totalCoins;
+        const estRuns = Math.max(1, Math.ceil(need / 280)); // ~280 pearls per steady medium run (rough estimate)
+        $nextSkinNote.textContent = `Need ${need.toLocaleString()} more 🦪 (roughly ${estRuns} good runs) to unlock ${nextSkin.name}. Keep climbing!`;
+      }
+    }
   };
   const openAccount = () => {
     renderAccountSummary();
@@ -386,6 +459,10 @@ function setupEntry() {
     if (authModal) authModal.style.display = 'none';
     if (authGoogleNote) authGoogleNote.textContent = '';
   };
+  // The pearl-pack store asks for the login modal when a guest clicks Buy.
+  window.addEventListener('seal-open-auth', () => openAuth('login'));
+  // Render pearl packs + handle Stripe return (no-ops if the store isn't configured).
+  initStore();
   document.getElementById('auth-close')?.addEventListener('click', closeAuth);
   authModal?.addEventListener('click', (e) => {
     if (e.target === authModal) closeAuth();

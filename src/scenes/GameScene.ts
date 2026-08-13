@@ -29,6 +29,25 @@ const MAX_HORIZONTAL_OFFSET = 118;
 
 const MOVE_SPEED = 280; // player horizontal move speed (design px/s)
 
+// ---- Mobile pointer steering (design-pixel units) ----
+// Desktop is a pure -1/0/1 direction from the keyboard; the linear smoothing
+// already gives a soft, controllable feel. Touch/drag on phones used to divide
+// the pixel delta by S(60), which meant even a tiny finger wobble produced a
+// full ±1 steering → the exact same physics constants but a twitchier, less
+// precise feel on mobile. This curve makes mobile feel like desktop while
+// keeping drag-to-move intuitive:
+//   • Dead zone: small jiggle under 45 design px → 0 steering (ignores finger
+//     tremor and the micro-movements of a steady hold).
+//   • Soft zone: up to 120 design px → ramps smoothly from 0 to ~0.7 (the
+//     "gentle steering" range, matching how people nudge a direction).
+//   • Full zone: beyond 120 design px → linearly ramps the last 30% up to ±1.
+// The steering result is still clamped to [-1, 1] so the MAX horizontal speed
+// is identical on every device. Physics = identical; feel = comparable.
+const POINTER_STEER_DEAD_DESIGN = 45;
+const POINTER_STEER_SOFT_DESIGN = 120;
+const POINTER_STEER_FULL_DESIGN = 220;
+const POINTER_STEER_SOFT_FRACTION = 0.7;
+
 // ---- Progression zones (metres) ----
 // Onboarding: safe, teaches the jump + item shapes. Flow: ramps gap/hazards
 // smoothly. Mastery: fullest mix, but the tide speed is capped so the challenge
@@ -419,21 +438,52 @@ export default class GameScene extends Phaser.Scene {
 
     this.spawnPlatform(x, y, kind);
 
-    // Pearls: far fewer than before (was up to 85% of platforms → "too many").
-    // A modest chance, and higher-value clusters sit on technical steps
-    // (risk/reward — harder jumps pay more). Each pearl gets a soft gold glow +
-    // a readable size so it's obvious at a glance.
-    const coinChance = (technical ? 0.42 : 0.22) * this.coinMult;
-    if (Math.random() < Math.min(0.5, coinChance)) {
-      const cluster = technical && Math.random() < 0.35 ? 3 : 1;
+    // Pearls — three tiers now so collecting feels varied instead of identical
+    // every time. The spawn balance is tuned per zone + per platform kind:
+    //   • Calm platforms → mostly COMMON pearls (1-value, the stable baseline).
+    //   • Technical platforms → higher overall drop rate, with a much larger
+    //     share of RARE/EPIC pearls because those jumps are the risky ones.
+    // All three tiers share the same physics (no gravity, same depth/tween) so
+    // gameplay behaviour is identical — only the reward + visual punch differ.
+    type PearlTier = 'common' | 'rare' | 'epic';
+    const pearlValues: Record<PearlTier, number> = { common: 1, rare: 3, epic: 8 };
+    const pearlScales: Record<PearlTier, number> = { common: 0.14, rare: 0.16, epic: 0.19 };
+    const pearlGlows: Record<PearlTier, number> = { common: 0xffe08a, rare: 0xff8fd8, epic: 0xb388ff };
+    const pearlTints: Record<PearlTier, number> = { common: 0xffffff, rare: 0xffc0e8, epic: 0xd9c6ff };
+    const pickPearlTier = (r: number, tech: boolean): PearlTier => {
+      const roll = Math.random();
+      const common = tech ? (r < 0.6 ? 0.72 : 0.82) : (r < 0.2 ? 0.94 : 0.88);
+      const rare = tech ? 0.88 : 0.975;
+      if (roll < common) return 'common';
+      if (roll < rare) return 'rare';
+      return 'epic';
+    };
+    const coinChance = (technical ? 0.46 : 0.24) * this.coinMult;
+    if (Math.random() < Math.min(0.52, coinChance)) {
+      const cluster = technical && Math.random() < 0.38 ? 3 : 1;
       for (let i = 0; i < cluster; i++) {
+        const tier = pickPearlTier(Math.random(), technical);
         const cx = Phaser.Math.Clamp(x + S((i - (cluster - 1) / 2) * 26), margin, w - margin);
         const coin = this.coins.create(cx, y - S(30), 'coin_pearl');
-        coin.setScale(S(0.14));
+        coin.setData('tier', tier);
+        coin.setData('value', pearlValues[tier]);
+        coin.setScale(S(pearlScales[tier]));
+        coin.setTint(pearlTints[tier]);
         coin.body.setAllowGravity(false);
         coin.setDepth(19);
-        this.glow(coin, 0xffe08a, 4);
-        this.tweens.add({ targets: coin, y: coin.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+        this.glow(coin, pearlGlows[tier], tier === 'epic' ? 8 : tier === 'rare' ? 6 : 4);
+        const bob = tier === 'epic' ? 9 : tier === 'rare' ? 7 : 6;
+        this.tweens.add({
+          targets: coin,
+          y: coin.y - S(bob),
+          duration: tier === 'epic' ? 600 : 700,
+          yoyo: true,
+          repeat: -1,
+          ease: 'sine.inOut',
+        });
+        if (tier === 'epic') {
+          this.tweens.add({ targets: coin, angle: 360, duration: 2200, repeat: -1 });
+        }
       }
     }
 
@@ -672,19 +722,25 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private handleCoin(_player: any, coinObj: any) {
+    const tier = (coinObj.getData('tier') ?? 'common') as 'common' | 'rare' | 'epic';
+    const baseValue = (coinObj.getData('value') as number) ?? 1;
     coinObj.destroy();
     // Combo: grabbing coins in quick succession (within the 900ms window)
-    // ramps the payout up to +5 per pearl. The window lapsing resets the
-    // chain. Previously the on-screen "+N 🦪" was shown but never actually
-    // awarded, and the combo never reset — this makes the reward real.
+    // ramps the payout up to +5 on top of the pearl's tier base value.
+    // RARE pearls pay +3 + combo and EPIC pearls pay +8 + combo, so they
+    // punch noticeably above the common 1-value baseline without blowing
+    // the economy out of scale.
     const now = this.time.now;
     if (now > this.comboTimer) this.comboCoins = 0;
     this.comboCoins += 1;
     this.comboTimer = now + 900;
-    const bonus = Math.min(this.comboCoins, 5);
-    this.coinsCollected += bonus;
+    const comboBonus = Math.min(this.comboCoins, 5);
+    const gained = baseValue + (tier === 'common' ? comboBonus : 0);
+    this.coinsCollected += gained;
     playSfx('coin');
-    this.floatText(`+${bonus} 🦪`, this.player.x, this.player.y - S(40), '#ffd166');
+    const tierLabel = tier === 'epic' ? '✨ ' : tier === 'rare' ? '💎 ' : '';
+    const color = tier === 'epic' ? '#c792ff' : tier === 'rare' ? '#ff8bc8' : '#ffd166';
+    this.floatText(`${tierLabel}+${gained} 🦪`, this.player.x, this.player.y - S(40), color);
   }
 
   private handleHeart(_player: any, heartObj: any) {
@@ -786,13 +842,28 @@ export default class GameScene extends Phaser.Scene {
     const dt = delta / 1000;
     const w = this.scale.width;
 
-    // Input movement
+    // Input movement. Keyboard stays a crisp -1/0/1 direction with the same
+    // linear smoothing as before. Pointer/touch uses the 3-segment design
+    // curve (dead → soft → full) so tiny finger wobbles don't become full
+    // steering, and medium drags nudge the seal without flipping it all the
+    // way across. Physics outcome is identical on every device (identical
+    // targetVX and smoothing), only the *human→input* translation differs.
     let moveX = 0;
     if (this.cursors.left.isDown) moveX = -1;
     else if (this.cursors.right.isDown) moveX = 1;
     else if (this.pointerDown) {
       const diff = this.pointerX - this.player.x;
-      moveX = Phaser.Math.Clamp(diff / S(60), -1, 1);
+      const absDesign = Math.abs(diff) / S(1);
+      const sign = Math.sign(diff);
+      if (absDesign <= POINTER_STEER_DEAD_DESIGN) {
+        moveX = 0;
+      } else if (absDesign <= POINTER_STEER_SOFT_DESIGN) {
+        const t = (absDesign - POINTER_STEER_DEAD_DESIGN) / Math.max(1, POINTER_STEER_SOFT_DESIGN - POINTER_STEER_DEAD_DESIGN);
+        moveX = sign * Phaser.Math.Interpolation.Linear([0, POINTER_STEER_SOFT_FRACTION], t);
+      } else {
+        const t = Phaser.Math.Clamp((absDesign - POINTER_STEER_SOFT_DESIGN) / Math.max(1, POINTER_STEER_FULL_DESIGN - POINTER_STEER_SOFT_DESIGN), 0, 1);
+        moveX = sign * Phaser.Math.Interpolation.Linear([POINTER_STEER_SOFT_FRACTION, 1], t);
+      }
     }
     const speedMult = this.time.now < this.speedBoostUntil ? 1.5 : 1;
     const targetVX = moveX * S(MOVE_SPEED) * speedMult;
