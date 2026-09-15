@@ -121,43 +121,62 @@ export async function initWebAds() {
 let interstitialBroken = false;
 let rewardedBroken = false;
 
+// MASTER SWITCH for the AdSense H5 "adBreak" API (interstitial + rewarded video).
+// It ONLY fills once the AdSense account is APPROVED for H5 Games Ads. Until then
+// adBreak() loads but never starts an ad and never calls adBreakDone, so every
+// attempt just pauses the game behind a spinner until a safety timeout fires —
+// i.e. the reported "revive / play-again freezes for ages" bug. While this is
+// false we skip adBreak entirely: replays are instant + free and the "watch an ad
+// for a bonus" button is hidden (webRewardedReady → false). Display banners and
+// the script load (for AdSense site review) are unaffected. Flip to true the day
+// H5 Games Ads is approved — no other change needed.
+const WEB_H5_ADBREAK_ENABLED = false;
+
+const REWARDED_START_MS = 3500; // if a rewarded ad doesn't even START within this, treat as no-fill
 const INTERSTITIAL_START_MS = 2500; // if no ad even STARTS within this, continue
 const AD_PLAYING_SAFETY_MS = 25000; // once an ad started, absolute cap so we never hang
-const REWARDED_TIMEOUT_MS = 30000; // generous: a real rewarded video may run this long
+const REWARDED_PLAYING_SAFETY_MS = 30000; // once playing, generous cap for a full rewarded video
 
 /** Rewarded ads are considered available once the SDK is configured + ready — and
- *  not after it has proven unresponsive this session. */
+ *  not after it has proven unresponsive this session. Gated by the H5 master
+ *  switch so we never offer a rewarded button that can only stall. */
 export function webRewardedReady(): boolean {
-  return webAdsActive() && (ready || scriptRequested) && !rewardedBroken;
+  return WEB_H5_ADBREAK_ENABLED && webAdsActive() && (ready || scriptRequested) && !rewardedBroken;
 }
 
 /** Show a rewarded video. onReward fires ONLY if it was watched to completion;
  *  onClose fires if dismissed early / no fill / not configured. */
 export function showWebRewarded(onReward: () => void, onClose: () => void) {
-  if (!webAdsActive() || rewardedBroken) {
+  if (!WEB_H5_ADBREAK_ENABLED || !webAdsActive() || rewardedBroken) {
     onClose();
     return;
   }
   const w = window as unknown as W;
   let earned = false;
   let settled = false;
+  let timer = 0;
   const done = (reward: boolean) => {
     if (settled) return;
     settled = true;
     window.clearTimeout(timer);
     reward ? onReward() : onClose();
   };
-  // Safety net: if the SDK never calls adBreakDone (unapproved H5 / stuck), close
-  // out with no reward and stop offering rewarded ads this session.
-  const timer = window.setTimeout(() => {
+  // Two-phase safety, mirroring the interstitial: first a SHORT window for the ad
+  // to even start. If beforeReward never fires (unapproved H5 / no-fill) we close
+  // out fast with no reward — no more 30s frozen wait — and stop offering rewarded
+  // ads this session. Once the ad actually starts we swap to a generous cap so a
+  // real video is never cut off.
+  timer = window.setTimeout(() => {
     rewardedBroken = true;
     done(false);
-  }, REWARDED_TIMEOUT_MS);
+  }, REWARDED_START_MS);
   try {
     w.adBreak?.({
       type: 'reward',
       name: 'reward',
       beforeReward: (showAdFn: () => void) => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => done(earned), REWARDED_PLAYING_SAFETY_MS);
         try {
           showAdFn();
         } catch {
@@ -178,8 +197,9 @@ export function showWebRewarded(onReward: () => void, onClose: () => void) {
 /** Interstitial between plays. ALWAYS calls onDone — quickly — whether or not an
  *  ad showed, so "Play Again" can never freeze on a stuck/unapproved ad SDK. */
 export function showWebInterstitial(onDone: () => void) {
-  // Not configured, or the SDK already proved unresponsive → replay for free, now.
-  if (!webAdsActive() || interstitialBroken) {
+  // H5 disabled, not configured, or the SDK already proved unresponsive → replay
+  // for free, right now (no pause, no spinner).
+  if (!WEB_H5_ADBREAK_ENABLED || !webAdsActive() || interstitialBroken) {
     onDone();
     return;
   }

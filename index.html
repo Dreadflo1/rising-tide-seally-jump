@@ -194,6 +194,17 @@
     #landing .keys .plus { opacity:.6; }
     #landing .ctrl-note { margin-top:16px; font-size:14px; opacity:.85; }
 
+    /* ---- "Every jump heals the ocean" callout ---- */
+    #landing .ocean-heal { max-width:760px; margin:28px auto 0; text-align:left;
+      background:linear-gradient(180deg, rgba(46,230,200,.12), rgba(10,36,54,.34));
+      border:1px solid var(--stroke); border-radius:18px; padding:22px 24px; backdrop-filter:blur(3px); }
+    #landing .ocean-heal .ic { font-size:30px; margin-bottom:6px; }
+    #landing .ocean-heal h3 { font-family:'Baloo 2',sans-serif; font-size:20px; margin:0 0 12px; }
+    #landing .ocean-heal p { font-size:14px; opacity:.92; margin:0 0 10px; line-height:1.55; }
+    #landing .ocean-heal p:last-child { margin-bottom:0; }
+    #landing .ocean-heal strong { color:#7ff0e0; }
+    #landing .ocean-heal a { color:#7ff0e0; }
+
     /* ---- Ambiance masonry ---- */
     #landing .ambiance { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; max-width:800px; margin:0 auto; }
     #landing .ambiance img { width:100%; height:100%; aspect-ratio:4/3; object-fit:cover; display:block; border-radius:14px;
@@ -369,7 +380,7 @@
         <div class="grid2">
           <div class="card"><div class="ic">🌊</div><h3>Chasing tide</h3><p>The water rises and speeds up the higher you climb — one slip and it gets you.</p></div>
           <div class="card"><div class="ic">🐢</div><h3>Turtles &amp; power-ups</h3><p>Ride sea turtles, spring off coral bouncers, grab shields and dolphin boosts.</p></div>
-          <div class="card"><div class="ic">🗺️</div><h3>Skins &amp; 3 maps</h3><p>Unlock 5 seal costumes and 3 maps that each play differently.</p></div>
+          <div class="card"><div class="ic">🗺️</div><h3>Skins &amp; 3 maps</h3><p>Unlock 7 seal costumes and 3 maps that each play differently.</p></div>
           <div class="card"><div class="ic">🏆</div><h3>Medals &amp; leaderboard</h3><p>Earn 12 medals, chain pearl combos and climb the global ranks.</p></div>
         </div>
       </div>
@@ -386,7 +397,23 @@
           <span class="plus">or</span>
           <span class="key">👆 Tap &amp; hold</span>
         </div>
-        <p class="ctrl-note">Bounce off platforms, grab pearls, stay ahead of the tide. That's it.</p>
+        <p class="ctrl-note">Tilt Seally toward the next platform and let each bounce carry him higher.</p>
+
+        <div class="grid2" style="margin-top:26px">
+          <div class="card"><div class="ic">🪜</div><h3>Bounce up</h3><p>Land on platforms to spring higher. Springs launch you further; moving and cracked ones keep you on your flippers.</p></div>
+          <div class="card"><div class="ic">🦪</div><h3>Collect pearls</h3><p>Scoop pearls as you climb, then spend them on new skins and ocean worlds.</p></div>
+          <div class="card"><div class="ic">♻️</div><h3>Scoop the trash</h3><p>Bits of plastic drift through the water with a friendly cyan ♻️ glow. Grab each one to fill your cleanup meter — watch the <strong>♻️&nbsp;0/8</strong> gauge climb.</p></div>
+          <div class="card"><div class="ic">🚢</div><h3>Send the cleanup boat</h3><p>Fill the meter and a boat sweeps across the sea, clearing the plastic, oil and hazards on screen. <em>“Ocean cleaned!”</em></p></div>
+        </div>
+
+        <p class="ctrl-note">…and always stay ahead of the rising tide. 🌊</p>
+
+        <div class="ocean-heal">
+          <div class="ic">💙</div>
+          <h3>Every jump heals the ocean — for real</h3>
+          <p><strong>In the game:</strong> the higher Seally climbs, the more plastic he scoops from the water. Fill the cleanup meter and the boat visibly clears the sea — and your all-time total (“pieces of ocean cleaned”) keeps growing, run after run.</p>
+          <p><strong>In real life:</strong> 20% of the game's revenue goes to <a href="https://theoceancleanup.com" target="_blank" rel="noopener">The Ocean Cleanup</a>, which pulls plastic out of oceans and rivers. Playing for free already helps — every run turns fun into a real donation.</p>
+        </div>
       </div>
     </section>
 

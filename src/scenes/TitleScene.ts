@@ -303,10 +303,10 @@ export default class TitleScene extends Phaser.Scene {
           '• Bounce on platforms to climb higher — every 100m is a new Level\n' +
           '• The tide below is RISING — never stop!\n' +
           '• Collect pearls 🦪 for badges & shop items\n' +
+          '• ♻️ Scoop floating trash — fill the meter to launch a 🚢 cleanup boat!\n' +
           '• 🐬 Dolphin push = speed boost + invulnerable\n' +
           '• 📜 Ocean Law = slows the tide for a few seconds\n' +
           '• 🐢 Turtle Shield = survive one hit\n' +
-          '• 🗑️ Floating trash knocks you back\n' +
           '• 🛢️ Oil slicks make you slip — sluggish steering for a few seconds\n' +
           '• 🪨 Poachers hurl rocks from off-screen — dodge sideways!',
         { fontFamily: FONT_BODY, fontSize: `${S(13)}px`, color: '#ffffff', align: 'left', lineSpacing: S(8) }
