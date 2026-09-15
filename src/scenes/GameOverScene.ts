@@ -167,8 +167,9 @@ export default class GameOverScene extends Phaser.Scene {
     resultsPanel.lineStyle(S(1.5), 0x3a7f95, 0.5);
     resultsPanel.strokeRoundedRect(panelX, panelTop, panelW, panelH, S(16));
     // Lifetime cleanup total — ties this run to the real mission (subtle footnote).
+    // Placed BELOW the card's bottom edge (was overlapping the border/rank line).
     if (st.trashCleaned > 0) {
-      cy += S(10);
+      cy = panelTop + panelH + S(16);
       flow(
         this.add.text(cx, 0, `🌊 ${st.trashCleaned.toLocaleString()} pieces of ocean cleaned all-time 💙`, {
           fontFamily: FONT_BODY,

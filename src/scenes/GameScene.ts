@@ -131,7 +131,7 @@ export default class GameScene extends Phaser.Scene {
   private slipperyUntil = 0;
   private lastAnnouncedLevel = 1;
   private shieldActive = false;
-  private shieldIcon?: Phaser.GameObjects.Image;
+  private shieldIcon?: Phaser.GameObjects.Arc; // protective bubble drawn around the seal
   private speedBoostUntil = 0;
   private pushCompanion?: Phaser.GameObjects.Image;
 
@@ -412,7 +412,10 @@ export default class GameScene extends Phaser.Scene {
 
   private buildTideVisual() {
     this.tideSprite.setVisible(false);
-    this.tideGraphics = this.add.graphics().setDepth(16);
+    // Depth 19.5: ABOVE platforms/pearls/traps (18–19) but BELOW the seal (20), so
+    // anything the rising water reaches is drawn UNDER a translucent layer — it
+    // reads as submerged/covered — while the seal always stays visible on top.
+    this.tideGraphics = this.add.graphics().setDepth(19.5);
     this.drawTide();
   }
 
@@ -428,14 +431,24 @@ export default class GameScene extends Phaser.Scene {
     const step = S(20); // small step → smooth crest; it's still just 2 draw calls
     const amp = S(7);
     const crest = (x: number) => this.tideY + Math.sin(x * 0.02 + t) * amp;
-    // Water body: ONE filled polygon with a smooth wavy top edge — prettier and
-    // fewer draws than the old row of rectangles.
-    g.fillStyle(0x0b4f6c, 0.94);
+    // Water body: ONE filled polygon with a smooth wavy top edge. Translucent
+    // (~0.7) and drawn ABOVE the pieces (depth 19.5) so submerged platforms/pearls/
+    // traps show through, tinted — they read as covered by the rising water.
+    const bottom = this.tideY + S(4000);
+    g.fillStyle(0x0b4f6c, 0.7);
     g.beginPath();
-    g.moveTo(left, this.tideY + S(4000));
+    g.moveTo(left, bottom);
     g.lineTo(left, crest(left));
     for (let x = left; x <= right; x += step) g.lineTo(x, crest(x));
-    g.lineTo(right, this.tideY + S(4000));
+    g.lineTo(right, bottom);
+    g.closePath();
+    g.fillPath();
+    // Brighter shallow band just under the crest → a sense of depth (darker below).
+    g.fillStyle(0x1e86ad, 0.28);
+    g.beginPath();
+    g.moveTo(left, crest(left));
+    for (let x = left; x <= right; x += step) g.lineTo(x, crest(x));
+    for (let x = right; x >= left; x -= step) g.lineTo(x, crest(x) + S(80));
     g.closePath();
     g.fillPath();
     // Foam highlight running along the crest.
@@ -1024,7 +1037,21 @@ export default class GameScene extends Phaser.Scene {
     } else if (kind === 'shield') {
       this.floatText('🐢 Shield Up!', this.player.x, this.player.y - S(50), '#a8e6cf');
       this.shieldActive = true;
-      this.shieldIcon = this.add.image(this.player.x, this.player.y, 'powerup_shield').setScale(S(0.3)).setDepth(21).setAlpha(0.7);
+      // A clean protective BUBBLE drawn around the seal (soft cyan fill + bright
+      // rim + gentle pulse) instead of the old flat shield PNG slapped on top.
+      const r = this.player.displayWidth * 0.62;
+      this.shieldIcon = this.add
+        .circle(this.player.x, this.player.y, r, 0x2ee6c8, 0.12)
+        .setStrokeStyle(S(3.5), 0x8affea, 0.95)
+        .setDepth(21);
+      this.tweens.add({
+        targets: this.shieldIcon,
+        scale: 1.06,
+        duration: 620,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+      });
     }
   }
 
@@ -1046,7 +1073,13 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.shieldActive) {
       this.shieldActive = false;
-      this.shieldIcon?.destroy();
+      if (this.shieldIcon) {
+        this.tweens.killTweensOf(this.shieldIcon); // stop the pulse before removing it
+        // Quick "pop" as the bubble absorbs the hit.
+        const bubble = this.shieldIcon;
+        this.tweens.add({ targets: bubble, scale: 1.4, alpha: 0, duration: 200, onComplete: () => bubble.destroy() });
+        this.shieldIcon = undefined;
+      }
       if (kind !== 'oil') hazObj.destroy();
       this.floatText('Shield Absorbed!', this.player.x, this.player.y - S(40), '#a8e6cf');
       this.invulnerableUntil = this.time.now + 800;
