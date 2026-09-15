@@ -60,17 +60,17 @@ export const MAPS: MapDef[] = [
 ];
 
 // Skins are bought with TRASH COLLECTED (the ♻️ cleanup currency), not pearls, so
-// `cost` here is in pieces of ocean trash. Prices are trash-scale (a good run
-// nets ~15-30 pieces) — earnable through play, ramping up to the rare ones.
+// `cost` here is in pieces of ocean trash. Priced as long-haul goals (a good run
+// nets ~15-30 pieces) so costumes stay aspirational, ramping to the rare ones.
 export const SKINS: SkinDef[] = [
   { id: 'seal', name: 'Seally', sprite: 'player_seal', cost: 0 },
-  { id: 'surfer', name: 'Surfer Seally', sprite: 'seal_skin_surfer', cost: 40 },
-  { id: 'cool', name: 'Cool Seally', sprite: 'seal_skin_cool', cost: 75 },
-  { id: 'scuba', name: 'Scuba Seally', sprite: 'seal_skin_scuba', cost: 130 },
-  { id: 'floatie', name: 'Floatie Seally', sprite: 'seal_skin_floatie', cost: 200 },
-  { id: 'pirate', name: 'Pirate Seally', sprite: 'seal_skin_pirate', cost: 320 },
-  { id: 'astronaut', name: 'Astronaut Seally', sprite: 'seal_skin_astronaut', cost: 500 },
-  { id: 'neptune', name: 'King Neptune Seally', sprite: 'seal_skin_neptune', cost: 800 },
+  { id: 'surfer', name: 'Surfer Seally', sprite: 'seal_skin_surfer', cost: 400 },
+  { id: 'cool', name: 'Cool Seally', sprite: 'seal_skin_cool', cost: 750 },
+  { id: 'scuba', name: 'Scuba Seally', sprite: 'seal_skin_scuba', cost: 1300 },
+  { id: 'floatie', name: 'Floatie Seally', sprite: 'seal_skin_floatie', cost: 2000 },
+  { id: 'pirate', name: 'Pirate Seally', sprite: 'seal_skin_pirate', cost: 3200 },
+  { id: 'astronaut', name: 'Astronaut Seally', sprite: 'seal_skin_astronaut', cost: 5000 },
+  { id: 'neptune', name: 'King Neptune Seally', sprite: 'seal_skin_neptune', cost: 8000 },
 ];
 
 // Extra lives: earned every 350 m in a run and purchasable in the shop, capped

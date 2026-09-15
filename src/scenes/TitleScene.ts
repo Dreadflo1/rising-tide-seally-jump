@@ -66,14 +66,21 @@ export default class TitleScene extends Phaser.Scene {
       this.confirmLogout();
     });
 
-    this.add
-      .text(w / 2, h * 0.5, `Best height: ${st.highScoreMeters}m\nPearls: ${st.totalCoins} 🦪`, {
-        fontFamily: FONT_BODY,
-        fontSize: `${S(16)}px`,
-        color: '#ffffff',
-        align: 'center',
-      })
-      .setOrigin(0.5);
+    // Top achievements — best height, pearls and trash collected — as tappable
+    // pills. Height jumps to the leaderboard; pearls and trash open the shop
+    // (trash is the ♻️ currency spent on skins).
+    const pills = [
+      this.makeStatPill(`🏔️ ${st.highScoreMeters} m`, 0x118ab2, () => this.showLeaderboard()),
+      this.makeStatPill(`🦪 ${st.totalCoins}`, 0x1a5b7a, () => this.scene.start('ShopScene')),
+      this.makeStatPill(`♻️ ${st.trashCleaned}`, 0x0b7a5c, () => this.scene.start('ShopScene')),
+    ];
+    const pillGap = S(10);
+    const pillsTotalW = pills.reduce((sum, p) => sum + p.width, 0) + pillGap * (pills.length - 1);
+    let pillX = w / 2 - pillsTotalW / 2;
+    pills.forEach((p) => {
+      p.setPosition(pillX + p.width / 2, h * 0.5);
+      pillX += p.width + pillGap;
+    });
 
     const startGame = () => {
       this.cameras.main.fadeOut(250, 8, 30, 50);
@@ -287,33 +294,66 @@ export default class TitleScene extends Phaser.Scene {
     return btn;
   }
 
+  /** A rounded "achievement" pill: icon + value on a coloured, tappable badge.
+   *  Created at the origin — the caller positions it once widths are known. */
+  private makeStatPill(text: string, bg: number, onTap: () => void): Phaser.GameObjects.Container {
+    const emojiFont = '"Nunito","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+    const label = this.add
+      .text(0, 0, text, { fontFamily: emojiFont, fontSize: `${S(15)}px`, color: '#ffffff' })
+      .setOrigin(0.5);
+    const pw = label.width + S(30);
+    const ph = label.height + S(16);
+    const g = this.add.graphics();
+    g.fillStyle(bg, 0.94);
+    g.fillRoundedRect(-pw / 2, -ph / 2, pw, ph, S(13));
+    g.lineStyle(S(1.5), 0xffffff, 0.3);
+    g.strokeRoundedRect(-pw / 2, -ph / 2, pw, ph, S(13));
+    const pill = this.add.container(0, 0, [g, label]);
+    pill.setSize(pw, ph);
+    pill.setInteractive({ useHandCursor: true });
+    pill.on('pointerover', () => pill.setScale(1.05));
+    pill.on('pointerout', () => pill.setScale(1));
+    pill.on('pointerdown', () => {
+      playSfx('click');
+      onTap();
+    });
+    return pill;
+  }
+
   private showHelp() {
     const w = this.scale.width;
     const h = this.scale.height;
     const overlay = this.add.container(0, 0).setDepth(2000);
-    const bg = this.add.rectangle(w / 2, h / 2, w * 0.86, h * 0.62, 0x0b3d5c, 0.97).setStrokeStyle(S(3), 0xffd166);
+    const bg = this.add.rectangle(w / 2, h / 2, w * 0.88, h * 0.68, 0x0b3d5c, 0.97).setStrokeStyle(S(3), 0xffd166);
     const title = this.add
-      .text(w / 2, h * 0.24, '🦭 How To Play', { fontFamily: FONT_TITLE, fontSize: `${S(22)}px`, color: '#ffd166' })
+      .text(w / 2, h * 0.21, '🦭 How To Play', { fontFamily: FONT_TITLE, fontSize: `${S(22)}px`, color: '#ffd166' })
       .setOrigin(0.5);
+    const emojiFont = '"Nunito","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
     const body = this.add
       .text(
         w / 2,
         h * 0.5,
         '• Tilt / arrow keys / drag to move left-right\n' +
-          '• Bounce on platforms to climb higher — every 100m is a new Level\n' +
+          '• Bounce on platforms to climb — every 100m is a new Level\n' +
           '• The tide below is RISING — never stop!\n' +
-          '• Collect pearls 🦪 for badges & shop items\n' +
-          '• ♻️ Scoop floating trash — spend it on skins & launch a 🚢 cleanup boat!\n' +
+          '• Collect pearls 🦪 & earn medals as you climb\n' +
+          '• ♻️ Scoop floating trash — spend it on skins & launch a 🚢 cleanup boat\n' +
           '• 🐬 Dolphin push = speed boost + invulnerable\n' +
-          '• 📜 Ocean Law = slows the tide for a few seconds\n' +
           '• 🐢 Turtle Shield = survive one hit\n' +
-          '• 🛢️ Oil slicks make you slip — sluggish steering for a few seconds\n' +
+          '• 🛢️ Oil slicks make you slip for a few seconds\n' +
           '• 🪨 Poachers hurl rocks from off-screen — dodge sideways!',
-        { fontFamily: FONT_BODY, fontSize: `${S(13)}px`, color: '#ffffff', align: 'left', lineSpacing: S(8) }
+        {
+          fontFamily: emojiFont,
+          fontSize: `${S(13)}px`,
+          color: '#ffffff',
+          align: 'left',
+          lineSpacing: S(9),
+          wordWrap: { width: w * 0.88 - S(40) },
+        }
       )
       .setOrigin(0.5);
     const close = this.add
-      .text(w / 2, h * 0.74, 'GOT IT', {
+      .text(w / 2, h * 0.76, 'GOT IT', {
         fontFamily: FONT_TITLE,
         fontSize: `${S(18)}px`,
         color: '#0b3d5c',

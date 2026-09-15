@@ -20,6 +20,15 @@ export default class ShopScene extends Phaser.Scene {
   private content!: Phaser.GameObjects.Container;
   private coinLabel!: Phaser.GameObjects.Text;
   private tabButtons: { key: Tab; btn: Phaser.GameObjects.Text }[] = [];
+  // Vertical scrolling for lists taller than the screen (e.g. 8 skins).
+  private scrollY = 0;
+  private maxScroll = 0;
+  private contentTop = 0; // y where the scrollable content starts
+  private contentBottomLimit = 0; // y below which content must not be needed (above BACK)
+  private dragActive = false;
+  private dragStartPointerY = 0;
+  private dragStartScrollY = 0;
+  private didDrag = false; // true once a drag moved enough to count as a scroll, not a tap
 
   constructor() {
     super('ShopScene');
@@ -39,11 +48,12 @@ export default class ShopScene extends Phaser.Scene {
       .text(w / 2, S(66), `🦪 ${getState().totalCoins}`, { fontFamily: FONT_BODY, fontSize: `${S(16)}px`, color: '#ffffff' })
       .setOrigin(0.5);
 
+    // Store tab hidden for now (charity donate + info) — re-add { key: 'store',
+    // label: 'Store' } here to bring it back.
     const tabs: { key: Tab; label: string }[] = [
       { key: 'skins', label: 'Skins' },
       { key: 'maps', label: 'Maps' },
       { key: 'badges', label: 'Badges' },
-      { key: 'store', label: 'Store' },
     ];
     const tabWidth = w / tabs.length;
     this.tabButtons = [];
@@ -68,6 +78,16 @@ export default class ShopScene extends Phaser.Scene {
     });
 
     this.content = this.add.container(0, 0);
+
+    // Clip the scrollable list to the area between the tabs and the BACK button
+    // so scrolled-up rows don't bleed over the header or footer.
+    this.contentTop = S(120);
+    this.contentBottomLimit = h - S(96);
+    const maskShape = this.make.graphics({});
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(0, this.contentTop, w, this.contentBottomLimit - this.contentTop);
+    this.content.setMask(maskShape.createGeometryMask());
+
     this.renderContent();
 
     const back = this.add
@@ -79,11 +99,45 @@ export default class ShopScene extends Phaser.Scene {
         padding: { x: S(22), y: S(10) },
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: true })
+      .setDepth(10);
     back.on('pointerdown', () => {
       playSfx('click');
       this.scene.start('TitleScene');
     });
+
+    // --- Scrolling (mouse wheel + touch/drag) ---------------------------------
+    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      this.applyScroll(this.scrollY - dy);
+    });
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.dragActive = true;
+      this.didDrag = false;
+      this.dragStartPointerY = p.y;
+      this.dragStartScrollY = this.scrollY;
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (!this.dragActive) return;
+      const delta = p.y - this.dragStartPointerY;
+      if (!this.didDrag && Math.abs(delta) > S(6)) this.didDrag = true;
+      if (this.didDrag) this.applyScroll(this.dragStartScrollY + delta);
+    });
+    const endDrag = () => {
+      this.dragActive = false;
+    };
+    this.input.on('pointerup', endDrag);
+    this.input.on('pointerupoutside', endDrag);
+  }
+
+  /** Clamp and apply a target scroll offset (0 = top, negative scrolls down). */
+  private applyScroll(target: number) {
+    if (this.maxScroll <= 0) {
+      this.scrollY = 0;
+      this.content.y = 0;
+      return;
+    }
+    this.scrollY = Phaser.Math.Clamp(target, -this.maxScroll, 0);
+    this.content.y = this.scrollY;
   }
 
   // Repaint the tab bar so the yellow "active" highlight follows the current
@@ -109,6 +163,13 @@ export default class ShopScene extends Phaser.Scene {
     else if (this.tab === 'maps') this.renderMaps(w);
     else if (this.tab === 'badges') this.renderBadges(w);
     else this.renderStore(w);
+
+    // Recompute how far this tab's content can scroll, and reset to the top.
+    this.scrollY = 0;
+    this.content.y = 0;
+    const b = this.content.getBounds();
+    const contentBottom = b.y + b.height;
+    this.maxScroll = Math.max(0, contentBottom - this.contentBottomLimit + S(16));
   }
 
   private cardRow(y: number, x: number, width: number, height: number) {
@@ -141,7 +202,8 @@ export default class ShopScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
-      btn.on('pointerdown', () => {
+      btn.on('pointerup', () => {
+        if (this.didDrag) return; // was a scroll gesture, not a tap
         playSfx('click');
         if (owned) {
           selectSkin(skin.id);
@@ -195,7 +257,8 @@ export default class ShopScene extends Phaser.Scene {
           })
           .setOrigin(0.5)
           .setInteractive({ useHandCursor: true });
-        btn.on('pointerdown', () => {
+        btn.on('pointerup', () => {
+          if (this.didDrag) return; // was a scroll gesture, not a tap
           playSfx('click');
           selectMap(m.id);
           this.renderContent();
