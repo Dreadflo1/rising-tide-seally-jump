@@ -161,6 +161,7 @@ export default class GameScene extends Phaser.Scene {
   private lastLifeMeter = 0;
   private lastLitterMeter = 0; // cadence for collectible trash (the cleanup mechanic)
   private nextTrapMeter = FIRST_TRAP_M; // no traps before this, then randomised gaps
+  private nextProjectileMeter = 200; // fly-across hazards (rock @200m, shark @800m), launched from the live view
   // Cleanup mechanic: collect trash to fill this gauge; when full a cleanup boat
   // sweeps the screen and buys a tide breather. Run-local; reset each run.
   private cleanupCount = 0;
@@ -259,6 +260,7 @@ export default class GameScene extends Phaser.Scene {
     this.boatsThisRun = 0;
     this.boatBusy = false;
     this.nextTrapMeter = tuning.firstTrapM;
+    this.nextProjectileMeter = 200; // first poacher rock unlocks at 200 m
     this.powerupBag = [];
     this.recentKinds = [];
     this.platsSinceSpring = 99;
@@ -685,11 +687,13 @@ export default class GameScene extends Phaser.Scene {
     // dead end. Sparse spacing (~30-50 m early → ~16-28 m high), ÷hazardMult.
     if (platMeter >= this.nextTrapMeter) {
       // Trash is no longer a hazard — it's the collectible for the cleanup mechanic
-      // (spawned separately below). Real dangers only: oil, then rock/poacher/shark.
+      // (spawned separately below). PLACEMENT hazards are the ones that WAIT at
+      // their spot for the climber: the oil slick and the poacher diver. The
+      // fly-across projectiles (rock, shark) are launched from the live view in
+      // update() instead — spawning them here (900 px above) meant they crossed
+      // and despawned before the player ever reached that height.
       const pool: HazardKind[] = ['oil'];
-      if (platMeter >= 200) pool.push('rock');
-      if (platMeter >= 450) pool.push('human');
-      if (platMeter >= 800) pool.push('shark');
+      if (platMeter >= 300) pool.push('human');
       const hk = Phaser.Utils.Array.GetRandom(pool);
       // Place the trap IN the ascent corridor just above this platform, only a
       // modest step to one side — so it's actually on the route the seal jumps
@@ -1184,6 +1188,25 @@ export default class GameScene extends Phaser.Scene {
         this.lastAnnouncedLevel = level;
         this.floatText(`⬆️ Level ${level}!`, this.player.x, this.player.y - S(60), '#ffd166');
       }
+    }
+
+    // PROJECTILE HAZARDS (poacher rocks, then sharks) launched relative to the
+    // LIVE view — not at platform-generation time. They sweep across the screen
+    // once, so spawning them 900 px above (where platforms generate) meant they'd
+    // crossed and despawned before the player climbed there (the "no rocks ever"
+    // bug). Here they cross the lane just above the seal, where it must dodge them.
+    if (this.scoreMeters >= this.nextProjectileMeter) {
+      const w = this.scale.width;
+      const margin = S(46);
+      const projPool: HazardKind[] = ['rock'];
+      if (this.scoreMeters >= 800) projPool.push('shark');
+      const kind = Phaser.Utils.Array.GetRandom(projPool);
+      const viewY = this.player.y - Phaser.Math.Between(S(110), S(300));
+      this.spawnHazard(0, viewY, kind, w, margin);
+      // ~every 80 m early, tightening to ~40 m up high; scaled like placement traps.
+      const t = Phaser.Math.Clamp(this.scoreMeters / 3000, 0, 1);
+      const gapM = (Phaser.Math.Linear(80, 40, t) * tuning.trapRarity) / this.hazardMult;
+      this.nextProjectileMeter = this.scoreMeters + Math.max(15, gapM);
     }
 
     // Generate more platforms above as needed, always using the
