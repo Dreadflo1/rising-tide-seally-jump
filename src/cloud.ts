@@ -6,6 +6,7 @@
 
 import { getState, applyCloudState, setStateSaveHook } from './state';
 import { loginAccount, logout as localLogout } from './auth';
+import { isOwnHost } from './hosts';
 
 const TOKEN_KEY = 'seal-jump-cloud-token-v1';
 
@@ -31,7 +32,7 @@ export function isCloudLoggedIn(): boolean {
 // The account API only exists on our own deployment (Vercel), not on the GD CDN.
 function backendAvailable(): boolean {
   try {
-    return !/gamedistribution\.com$/i.test(location.hostname);
+    return isOwnHost();
   } catch {
     return true;
   }
@@ -165,6 +166,25 @@ export async function cloudGoogleLogin(idToken: string): Promise<AuthResult> {
 export function cloudLogout() {
   setCloudToken(null);
   localLogout();
+}
+
+/** Re-pull the cloud save for the current session and apply it locally. Returns
+ *  true if progress was refreshed. Used after a Stripe purchase so credited
+ *  pearls show up without re-login. */
+export async function cloudRefresh(): Promise<boolean> {
+  const token = getCloudToken();
+  if (!token || !backendAvailable()) return false;
+  try {
+    const { status, data } = await post('sync', { token });
+    if (status === 200 && data.ok && data.state) {
+      const s = getState();
+      applyCloudState(s.username, data.state, s.profileId);
+      return true;
+    }
+  } catch {
+    /* offline — ignore */
+  }
+  return false;
 }
 
 // Debounced push of the current state to the cloud save (only when logged in).

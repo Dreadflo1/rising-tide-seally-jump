@@ -64,6 +64,13 @@ export default class BootScene extends Phaser.Scene {
     this.load.image('bubble_particle', resolveAssetPath('sprites/bubble_particle.png'));
     this.load.image('trash_hazard', resolveAssetPath('sprites/trash_hazard.png'));
 
+    // Social share icons (used on the Game Over "Share your score" row).
+    this.load.image('soc_x', resolveAssetPath('social/x.png'));
+    this.load.image('soc_facebook', resolveAssetPath('social/facebook.png'));
+    this.load.image('soc_whatsapp', resolveAssetPath('social/whatsapp.png'));
+    this.load.image('soc_instagram', resolveAssetPath('social/instagram.png'));
+    this.load.image('soc_tiktok', resolveAssetPath('social/tiktok.png'));
+
     // Backgrounds
     this.load.image('bg_lagoon', resolveAssetPath('backgrounds/bg_lagoon.png'));
     this.load.image('bg_reef', resolveAssetPath('backgrounds/bg_reef.png'));

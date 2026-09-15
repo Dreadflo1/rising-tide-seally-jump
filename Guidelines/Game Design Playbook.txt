@@ -1,0 +1,284 @@
+Game Design Playbook – Protective Mammal Endless Jumper
+Concept : Un mammifère protecteur (loutre, phoque, manchot… avec son petit visible) saute de rocher en rocher pour échapper à une marée montante. L’océan est à la fois la menace et l’atmosphère.
+
+1. Core Loop (à définir en premier)
+Boucle d’action unique :
+Le joueur contrôle le mammifère gauche/droite → Il saute automatiquement vers le haut en atterrissant sur un rocher → Collecte poissons / algues / power-ups → Évite vagues, créatures marines, rochers qui s’effondrent → La marée le rattrape = mort → Restart instantané.
+Cibles empiriques :
+
+Temps entre la mort et le nouveau run : ≤ 0,8 seconde
+Durée moyenne du premier run (nouveaux joueurs) : 25–45 secondes
+Durée moyenne d’un run expert : 2–4 minutes
+Feedback après atterrissage sur un rocher : ≤ 80–100 ms (rebond + splash + son)
+
+Checklist Vertical Slice (Semaine 1)
+
+Personnage + bébé avec animations idle / jump / fall
+Gravité + hauteur de rebond constante
+Caméra qui ne suit que vers le haut (sauf à la mort)
+Niveau d’eau qui monte progressivement
+Mort au contact de l’eau
+Score = hauteur atteinte
+Restart instantané
+
+
+2. Layout & Visual Design (Thème Océan)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ÉlémentRecommandationPourquoiOrientationPortrait uniquementUne mainStyle artistiqueDoux, légèrement stylisé, lumière chaude sur les rochers vs bleu froid de l’eauContraste émotionnelPlateformesRochers de formes et couleurs clairement différenciéesLisibilité immédiatePersonnageMammifère protecteur avec bébé visible (dos ou poche)Attachement émotionnel fortMarée montanteSurface d’eau animée avec écume, petites vagues, refletsPression visuelle constanteArrière-planFalaises océaniques en couches + orage / soleil / lune distantProfondeur et ambianceHUDMinimal – hauteur/score en haut, high score discretFocus sur la montée
+Types de rochers à implémenter dans l’ordre :
+
+Rocher stable (sûr)
+Rocher friable (disparaît après 1 saut)
+Rocher mobile (bouge latéralement)
+Rocher rebondissant / algues élastiques
+Rocher glissant (légère dérive horizontale)
+Plus tard : débris flottants, floes de glace, coraux
+
+
+3. Interactions, Actions & Timings précis
+Contrôles
+
+Principal : Inclinaison ou boutons gauche/droite
+Secondaire optionnel : Tap pour protéger le bébé (invulnérabilité courte) ou petit boost
+
+Timings critiques à régler
+
+Hauteur de rebond normale : constante et lisible
+Rocher rebondissant : 2,8–3,5× la hauteur normale
+Vitesse de montée de la marée : lente au début, accélère avec la hauteur
+Durée des power-ups : 3,5–6 secondes
+Fenêtre sur rocher friable : 0,6–0,9 seconde avant disparition
+
+Micro-feedback obligatoire
+
+Atterrissage : petit splash + poussière de roche + son sourd
+Proche de l’eau : son d’eau qui augmente + teinte bleue sur les bords de l’écran
+Collecte power-up : pop de bulle satisfaisant + particules
+Mort : disparition dans l’eau avec splash final + son étouffé
+Nouveau record : célébration claire visuelle + audio
+
+
+4. Courbe de progression & difficulté
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Bande de hauteurCe qui se passeRessenti joueur0 – 400Uniquement rochers stables, marée lente, peu de poissonsSécurité & apprentissage400 – 1200Rochers friables + mobiles, marée qui accélèrePremière tension1200 – 2500Créatures marines + rochers rebondissantsExcitation2500 – 4000Effets de tempête, marée plus rapide, rochers glissantsDemande de skill4000+Densité élevée de dangers + power-ups rares puissantsZone de maîtrise
+Règles empiriques
+
+La vitesse de la marée est liée à la hauteur, pas au temps pur.
+Toujours laisser au moins un chemin viable pour un bon joueur.
+Les near-miss (échapper de justesse à une vague ou un rocher qui s’effondre) doivent être fréquents.
+Le début de partie doit être généreux (les 30–40 premières secondes décident de la rétention).
+
+
+5. Psychological Hooks adaptés au thème
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+HookImplémentation concrèteInstinct de protectionBébé toujours visible. Mourir = échouer à le protéger. Action optionnelle « protéger ».Menace montanteLigne d’eau visible qui monte en permanence. Intensité sonore et visuelle qui augmente.Récompenses variablesBancs de poissons aléatoires, poissons dorés rares, courants ascendants temporairesFeedback de maîtriseRecord de hauteur clair + message « Nouvelle hauteur de sécurité ! »One-more-tryMort → restart en ≤ 0,8 s. Aucun menu.Attachement émotionnelRéactions du personnage (inquiet près de l’eau, content en collectant pour le bébé)Aversion à la perteÉcran de mort qui montre la hauteur perdue (« Tu étais à 87 m de ton record »)
+
+6. KPIs à tracker dès le jour 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+KPICible saine (début)Ce que ça mesureRétention D1≥ 38 %Première impressionDurée moyenne de session4–9 minutesAccrochageNombre de runs par session≥ 10Force du « one more try »% de joueurs qui relancent < 2 s après mort≥ 85 %FrictionTemps jusqu’à la première mort (nouveaux)20–40 secondesDifficulté de début% qui battent leur premier record en ≤ 5 runs≥ 55 %Sentiment de progressionHauteur max moyenne Jour 1 vs Jour 7Tendance clairement haussièreCourbe d’apprentissage
+Si le taux de relance après mort passe sous 80 %, le flow mort → restart a trop de friction ou la mort est perçue comme injuste.
+
+7. Roadmap d’implémentation priorisée
+Semaine 1 – Vertical Slice jouable
+
+Mammifère + bébé
+Gravité + rebond sur rochers stables
+Eau qui monte (surface simple)
+Caméra qui suit
+Score = hauteur
+Mort + restart instantané
+Contrôles tilt/tap
+Splash + son d’atterrissage
+
+Semaine 2 – Variété & menace
+
+3–4 types de rochers
+Accélération de la marée avec la hauteur
+1–2 power-ups
+Premières créatures marines
+Sauvegarde high score + feedback « Nouveau record »
+
+Semaine 3 – Juice & émotion
+
+Réactions du personnage
+Meilleure animation et sound design de l’eau
+Particules et effets près de l’eau
+Jalons simples (« 1000 m – Bébé en sécurité pour l’instant »)
+Écran de mort avec hauteur perdue
+
+Semaine 4+ – Profondeur & rétention
+
+Plusieurs ambiances océaniques (matin calme, tempête, nuit)
+Plus de power-ups et dangers
+Léger méta (défi quotidien de hauteur, skins cosmétiques)
+Classements ou ghost runs
+
+
+8. Best Practices spécifiques au thème (empiriques)
+
+La marée doit toujours paraître juste. Le joueur doit comprendre pourquoi il est mort.
+Le bébé est ton levier émotionnel le plus fort — garde-le visible et réactif.
+L’eau doit paraître vivante (mouvement, son, variations de couleur) sans devenir bruyante visuellement.
+Les premiers rochers doivent être généreux. La frustration dans les 40 premières secondes tue la rétention.
+Les power-ups doivent créer des moments mémorables (grosse poussée vers le haut pendant que la marée rattrape).
+Teste longuement le feeling de l’accéléromètre.
+Le sound design de proximité de l’eau est l’un de tes outils de tension les plus puissants.
+Ne rends jamais la marée si rapide que le skill devient inutile.

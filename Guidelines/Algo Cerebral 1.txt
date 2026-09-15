@@ -1,0 +1,138 @@
+**Voici la version précise et actionnable** que tu as demandée.  
+Elle intègre l’algorithme cérébral (dopamine, ego bias, near-miss, instinct de protection…), les distances entre rochers, le rythme de fun, et les règles de génération pour que le jeu reste varié sans jamais devenir injuste ou monotone.
+
+---
+
+### 1. Algorithme Cérébral + Actions Humaines
+
+Le cerveau du joueur fonctionne en boucle constante. Voici comment le jeu doit y répondre :
+
+| Mécanisme cérébral          | Ce que le joueur ressent / fait                  | Comment le jeu doit répondre |
+|----------------------------|--------------------------------------------------|------------------------------|
+| **Dopamine (anticipation)** | « Je vais y arriver… »                          | Near-miss fréquents + récompenses variables |
+| **Ego bias**               | « J’aurais dû y arriver, c’était presque parfait » | Montrer clairement la hauteur perdue + message « Tu étais à X mètres de ton record » |
+| **Instinct de protection** | « Je dois sauver mon bébé »                     | Bébé toujours visible + réactions émotionnelles |
+| **Flow**                   | Sensation de contrôle et de rythme              | Distance et timing de sauts constants au début, puis variation progressive |
+| **Aversion à la perte**    | « Juste un dernier essai »                      | Restart ≤ 0,8 s + hauteur perdue affichée |
+| **Variable Ratio Reward**  | Surprise agréable                               | Power-ups et poissons rares, jamais prévisibles à 100 % |
+
+**Règle d’or** : Le joueur doit presque toujours penser « j’aurais pu le faire » plutôt que « c’était impossible ».
+
+---
+
+### 2. Distance entre les rochers & Rythme de fun
+
+On mesure tout en **nombre de sauts** (plus fiable que les pixels).
+
+**Structure de base (à respecter strictement au début) :**
+
+| Nombre de sauts depuis le début du run | Distance verticale moyenne entre rochers | Type de sensation | Objectif |
+|---------------------------------------|------------------------------------------|-------------------|----------|
+| 1 – 8 sauts                           | Facile (70–90 % de la hauteur de saut max) | Sécurité + apprentissage | Le joueur se sent compétent |
+| 9 – 20 sauts                          | Normale (55–75 %)                        | Rythme agréable   | On s’amuse vraiment |
+| 21 – 40 sauts                         | Un peu plus tendue (45–65 %)             | Première tension  | Near-miss commencent |
+| 41 – 70 sauts                         | Variable (35–70 %)                       | Challenge         | Skill + adrenaline |
+| 70+ sauts                             | Plus serrée + dangers densifiés          | Zone de maîtrise  | Records et fierté |
+
+**Règles précises de distance :**
+- Hauteur de saut normale du personnage = **H**
+- Distance verticale idéale entre deux rochers stables au début = **0,65 × H à 0,85 × H**
+- Jamais de trou > 1,05 × H dans les 25 premiers sauts (sauf si un rocher rebondissant est juste avant)
+- Après 30 sauts, on autorise occasionnellement des trous de 1,1–1,2 × H s’il y a un power-up ou un rocher rebondissant à proximité
+- Horizontalement : le joueur doit pouvoir atteindre le prochain rocher avec un déplacement max de 40–50 % de la largeur d’écran
+
+**Quand le joueur s’amuse le plus** : entre le **10e et le 35e saut**. C’est là que le rythme est parfait (ni trop facile, ni trop stressant). Tout le design doit maximiser le temps passé dans cette zone sur les premiers runs.
+
+---
+
+### 3. Règles de Génération des Rochers (Procédural)
+
+**Algorithme de base (à coder ainsi) :**
+
+1. On avance toujours vers le haut par « segments » de 4–7 rochers.
+2. Chaque segment a un **budget de difficulté** qui augmente très lentement avec la hauteur.
+3. On force toujours au moins **un chemin sûr** (suite de rochers atteignables sans power-up).
+
+**Table de probabilités par type de rocher** (à faire évoluer avec la hauteur) :
+
+| Type de rocher          | 0–500 m | 500–1500 m | 1500–3000 m | 3000 m+ | Règles strictes |
+|-------------------------|---------|------------|-------------|---------|-----------------|
+| Stable (vert/gris)      | 70 %    | 45 %       | 30 %        | 22 %    | Toujours présent |
+| Friable (brun)          | 15 %    | 25 %       | 28 %        | 25 %    | Max 2 d’affilée |
+| Mobile (bleu)           | 8 %     | 15 %       | 18 %        | 20 %    | Vitesse horizontale limitée |
+| Rebondissant            | 5 %     | 10 %       | 12 %        | 15 %    | Jamais deux trop proches |
+| Glissant                | 2 %     | 5 %        | 12 %        | 18 %    | Après 1200 m seulement |
+
+**Règles de placement obligatoires :**
+- Jamais plus de 3 rochers difficiles d’affilée sans un stable.
+- Après un trou un peu grand → forcément un rocher stable ou rebondissant.
+- Les rochers mobiles ne doivent jamais sortir complètement de l’écran horizontalement.
+- Densité : 1 rocher toutes les 0,55–0,85 × H en moyenne.
+
+---
+
+### 4. Items, Power-ups et Événements (Variété sans chaos)
+
+On ne veut **pas** que ce soit toujours les mêmes supers. On veut de la variété constante et prévisible dans son imprévisibilité.
+
+**Catégories d’items :**
+
+**A. Récompenses mineures (fréquentes)**
+- Petits poissons (score + 10–30)
+- Algues (petit boost de score)
+- Bulle d’air (très légère protection)
+
+**B. Power-ups moyens (réguliers)**
+- Courant ascendant (3,5–5 s de montée douce)
+- Bouclier de bulles (invulnérabilité 2,5–3,5 s)
+- Poisson doré (gros score)
+
+**C. Power-ups forts (rares)**
+- Jet d’eau / propulseur (grosse poussée verticale 4–6 s)
+- Appel de goéland (transporte un moment)
+- Protection parentale (le bébé active un bouclier plus long)
+
+**Règles de spawn (très importantes) :**
+
+| Hauteur       | Fréquence power-up moyen | Fréquence power-up fort | Règle de variété |
+|---------------|---------------------------|--------------------------|------------------|
+| 0–800 m       | 1 tous les 12–18 sauts    | Très rare (1/40 sauts)   | Principalement poissons |
+| 800–2000 m    | 1 tous les 9–14 sauts     | 1 tous les 25–35 sauts   | Mélange |
+| 2000 m+       | 1 tous les 7–12 sauts     | 1 tous les 18–28 sauts   | Plus de variété |
+
+**Règles anti-monotonie et anti-frustration :**
+- Jamais le même power-up deux fois de suite.
+- Après un power-up fort → au moins 8–10 sauts sans autre power-up fort.
+- Les power-ups forts apparaissent de préférence juste avant une zone un peu plus difficile (pour créer un moment héroïque).
+- 30 % des power-ups moyens sont purement score (poisson doré), pour ne pas toujours donner de l’avantage de mouvement.
+- Les créatures hostiles (crabes, méduses, goélands agressifs) apparaissent avec une densité qui augmente, mais jamais en bloquant totalement un chemin.
+
+---
+
+### 5. Résumé de l’algorithme global (à implémenter)
+
+```text
+Chaque nouveau rocher :
+1. Calculer la hauteur actuelle → déterminer le budget de difficulté
+2. Choisir le type de rocher selon la table de probabilités + contraintes (pas 3 difficiles d’affilée)
+3. Placer le rocher à une distance verticale entre 0,55H et 0,90H (selon zone)
+4. Vérifier qu’un chemin sûr existe encore
+5. Décider si un item spawn :
+   - Selon la table de fréquence
+   - Respecter la règle de variété (pas le même deux fois)
+   - Préférer placer les gros power-ups avant une zone tendue
+6. Ajouter near-miss potentiels (rocher friable juste après un mobile, vague qui monte, etc.)
+```
+
+---
+
+Ce système garantit :
+- Un début très agréable (on s’amuse vraiment entre le 10e et 35e saut)
+- Une variété constante
+- Des moments de puissance sans que le jeu devienne un festival de power-ups
+- Un ego bias bien exploité (« j’étais si proche »)
+- Une pression de la marée qui reste juste
+
+Tu peux copier-coller cette section telle quelle dans ta documentation.
+
+Veux-tu que je te fasse ensuite la version encore plus technique (pseudo-code de génération + valeurs exactes de H, vitesses, etc.) ?

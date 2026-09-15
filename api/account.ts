@@ -168,6 +168,26 @@ export default async function handler(req: any, res: any) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
     const action = body.action;
 
+    if (action === 'sync') {
+      // Read-only pull of the current cloud save for a logged-in session. Used
+      // after a Stripe purchase so newly-credited pearls appear without a
+      // re-login.
+      const profileId = verifyToken(body.token, secret);
+      if (!profileId) {
+        res.status(401).json({ error: 'invalid session' });
+        return;
+      }
+      const got = await redis(env, [['GET', saveKey(profileId)]]);
+      let state: unknown = {};
+      try {
+        state = got[0]?.result ? JSON.parse(got[0].result) : {};
+      } catch {
+        state = {};
+      }
+      res.status(200).json({ ok: true, state });
+      return;
+    }
+
     if (action === 'save') {
       const profileId = verifyToken(body.token, secret);
       if (!profileId) {

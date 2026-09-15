@@ -1,6 +1,12 @@
-// Persistent, per-account game state stored in localStorage.
+// Persistent, per-account game state. Stored via the `store` shim: normally
+// window.localStorage, but the CrazyGames Data Module inside their portal iframe
+// (localStorage isn't persisted there — see storage.ts).
 // Each logged-in username gets its own save slot so progress is tied to
 // "your" profile and survives across sessions/reloads.
+
+import { store } from './storage';
+import { onCrazyGames } from './crazyAds';
+import { isOwnHost } from './hosts';
 
 export interface BadgeDef {
   id: string;
@@ -79,6 +85,7 @@ interface GameState {
   muted: boolean;
   runsPlayed: number;
   charityMeter: number;
+  trashCleaned: number; // total pieces of ocean trash collected across all runs (the cleanup mechanic)
   totalSharesCount: number;
   lastLoginDate: string; // 'YYYY-MM-DD', local time
   loginStreak: number;
@@ -109,6 +116,7 @@ function defaultState(username: string): GameState {
     muted: false,
     runsPlayed: 0,
     charityMeter: 0,
+    trashCleaned: 0,
     totalSharesCount: 0,
     lastLoginDate: '',
     loginStreak: 0,
@@ -119,12 +127,18 @@ function defaultState(username: string): GameState {
 let state: GameState = defaultState('Guest');
 
 function keyFor(profileId: string) {
+  // On the CrazyGames portal the save lives in their per-user Data Module, so one
+  // stable key = one persistent save for that CrazyGames player. (Profiles there
+  // are ephemeral Guest#### ids that would otherwise change every session and lose
+  // the save; the leaderboard/cloud accounts that need distinct keys don't run on
+  // their host anyway.)
+  if (onCrazyGames()) return `${PROFILE_PREFIX}cg`;
   return `${PROFILE_PREFIX}${profileId.toLowerCase()}`;
 }
 
 export function loadProfile(profileId: string, username = profileId): GameState {
   try {
-    const raw = localStorage.getItem(keyFor(profileId));
+    const raw = store.getItem(keyFor(profileId));
     if (!raw) {
       state = { ...defaultState(username), profileId };
     } else {
@@ -153,7 +167,7 @@ export function setStateSaveHook(fn: (() => void) | null) {
 
 export function saveState() {
   try {
-    localStorage.setItem(keyFor(state.profileId), JSON.stringify(state));
+    store.setItem(keyFor(state.profileId), JSON.stringify(state));
   } catch {
     /* ignore */
   }
@@ -181,12 +195,12 @@ export function spendCoins(n: number): boolean {
 
 function submitToLeaderboard(username: string, meters: number) {
   try {
-    const raw = localStorage.getItem(LEADERBOARD_KEY);
+    const raw = store.getItem(LEADERBOARD_KEY);
     const list: LeaderboardEntry[] = raw ? JSON.parse(raw) : [];
     list.push({ username, meters, date: Date.now() });
     list.sort((a, b) => b.meters - a.meters);
     const trimmed = list.slice(0, 50);
-    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(trimmed));
+    store.setItem(LEADERBOARD_KEY, JSON.stringify(trimmed));
   } catch {
     /* ignore */
   }
@@ -194,7 +208,7 @@ function submitToLeaderboard(username: string, meters: number) {
 
 export function getLeaderboard(): LeaderboardEntry[] {
   try {
-    const raw = localStorage.getItem(LEADERBOARD_KEY);
+    const raw = store.getItem(LEADERBOARD_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -233,7 +247,7 @@ const GLOBAL_LB_CACHE_KEY = 'seal-jump-global-leaderboard-cache-v1';
 // 403 in the console. Skip the network entirely there and use the local board.
 function hasLeaderboardBackend(): boolean {
   try {
-    return !/gamedistribution\.com$/i.test(location.hostname);
+    return isOwnHost();
   } catch {
     return true;
   }
@@ -241,7 +255,7 @@ function hasLeaderboardBackend(): boolean {
 
 function cacheGlobalTop(top: LeaderboardEntry[]) {
   try {
-    localStorage.setItem(GLOBAL_LB_CACHE_KEY, JSON.stringify(top));
+    store.setItem(GLOBAL_LB_CACHE_KEY, JSON.stringify(top));
   } catch {
     /* ignore */
   }
@@ -249,7 +263,7 @@ function cacheGlobalTop(top: LeaderboardEntry[]) {
 
 function readCachedGlobalTop(): LeaderboardEntry[] {
   try {
-    const raw = localStorage.getItem(GLOBAL_LB_CACHE_KEY);
+    const raw = store.getItem(GLOBAL_LB_CACHE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -393,6 +407,13 @@ export function buyLife(cost: number): boolean {
   state.lives += 1;
   saveState();
   return true;
+}
+
+/** Record ocean trash collected via the in-game cleanup mechanic. Not saved per
+ *  call (that would thrash localStorage every pickup) — persisted with the run at
+ *  game over via registerRun()'s saveState(). */
+export function addTrashCleaned(n: number) {
+  state.trashCleaned += n;
 }
 
 export function donateToCharity(coins: number): boolean {

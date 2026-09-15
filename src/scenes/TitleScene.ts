@@ -40,7 +40,7 @@ export default class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(w / 2, h * 0.13 + S(42), 'SEAL JUMP', {
+      .text(w / 2, h * 0.13 + S(42), 'SEALLY JUMP', {
         fontFamily: FONT_TITLE,
         fontSize: `${S(30)}px`,
         color: '#ffd166',

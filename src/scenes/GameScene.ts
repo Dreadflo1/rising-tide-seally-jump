@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { FONT_TITLE, FONT_BODY, S } from '../constants';
-import { getState, registerRun, MAPS, SKINS, MAX_LIVES, addLife, spendLife, resetRunLives } from '../state';
+import { getState, registerRun, MAPS, SKINS, MAX_LIVES, addLife, spendLife, resetRunLives, addTrashCleaned } from '../state';
+import { crazyGameplayStart, crazyGameplayStop } from '../crazyAds';
 import { playSfx, gestureUnlock } from '../audio';
+import { tuning } from '../tuning';
 
-type PlatKind = 'normal' | 'move' | 'break' | 'spring';
+type PlatKind = 'normal' | 'move' | 'break' | 'spring' | 'slip';
 type HazardKind = 'trash' | 'rock' | 'oil' | 'shark' | 'human';
 
 interface PowerupData {
@@ -29,24 +31,16 @@ const MAX_HORIZONTAL_OFFSET = 118;
 
 const MOVE_SPEED = 280; // player horizontal move speed (design px/s)
 
-// ---- Mobile pointer steering (design-pixel units) ----
-// Desktop is a pure -1/0/1 direction from the keyboard; the linear smoothing
-// already gives a soft, controllable feel. Touch/drag on phones used to divide
-// the pixel delta by S(60), which meant even a tiny finger wobble produced a
-// full ±1 steering → the exact same physics constants but a twitchier, less
-// precise feel on mobile. This curve makes mobile feel like desktop while
-// keeping drag-to-move intuitive:
-//   • Dead zone: small jiggle under 45 design px → 0 steering (ignores finger
-//     tremor and the micro-movements of a steady hold).
-//   • Soft zone: up to 120 design px → ramps smoothly from 0 to ~0.7 (the
-//     "gentle steering" range, matching how people nudge a direction).
-//   • Full zone: beyond 120 design px → linearly ramps the last 30% up to ±1.
-// The steering result is still clamped to [-1, 1] so the MAX horizontal speed
-// is identical on every device. Physics = identical; feel = comparable.
-const POINTER_STEER_DEAD_DESIGN = 45;
-const POINTER_STEER_SOFT_DESIGN = 120;
-const POINTER_STEER_FULL_DESIGN = 220;
-const POINTER_STEER_SOFT_FRACTION = 0.7;
+// ---- Mobile touch steering ----
+// Half-screen model (the genre standard, and what players instinctively try):
+// touch/hold the LEFT half of the screen → steer left, the RIGHT half → steer
+// right, at full speed. A quick tap on a side nudges that way; holding keeps
+// going. Only a thin dead band at the exact centre line yields no steering, so
+// "I tapped and nothing happened" can't occur off-centre. The velocity smoothing
+// below still ramps the speed up softly, so it never feels twitchy. (The old
+// "steer toward your finger, with a dead zone AROUND the seal" model made a tap
+// near the seal's column — often the centre — do nothing, which read as broken.)
+const TOUCH_CENTER_DEADBAND_DESIGN = 14;
 
 // ---- Progression zones (metres) ----
 // Onboarding: safe, teaches the jump + item shapes. Flow: ramps gap/hazards
@@ -56,33 +50,37 @@ const ONBOARDING_M = 300;
 const FLOW_M = 800;
 
 // ---- Tide tuning (design-pixel units) ----
-// The tide is the run's pressure. It rises SMOOTHLY at a speed and is NEVER
-// snapped to the player's position (that made the water "jump" when you
-// jumped). Its speed = a constant base (that slowly ramps over the run) PLUS
-// an acceleration proportional to how far it has fallen below the bottom of the
-// screen. So a fast climber pulls ahead and the tide speeds up to chase;
-// slowing/stopping lets it rise into view and drown you; and the time ramp
-// makes even a perfect climb unsurvivable eventually.
+// The tide rises at a CONSTANT speed for the ENTIRE run — the same rate at 20 m
+// as at 2500 m. It never accelerates and never "chases": predictable, learnable
+// pressure. ALL of the escalating difficulty comes from the traps, placed on a
+// randomised metre grid in generatePlatformAt (random type + random spacing).
 //
-// Player climbs at ~85–95 design px/s on a steady bounce. The cap below (118)
-// stays ~1.25× that climb rate, so a skillful player can always outclimb the
-// water when moving cleanly. The chase gain (0.24) is gentle: a fast opening
-// staircase / springs burst no longer rockets the tide to 3× climb speed.
-//
-// Two safety rails on the opening:
-//   - The tide starts ~120 design px DEEPER below the first platform, so even
-//     a slow first bounce isn't an instant drown.
-//   - A 3 s opening GRACE clamps the effective rise speed to 6 design px/s and
-//     ALSO disables chase entirely in that window, guaranteeing a clean start
-//     even if you mis-time the very first jump.
-const TIDE_BASE_SPEED = 22; // constant base rise (design px/s)
-const TIDE_TIME_ACCEL = 0.48; // base rise gained per second of the run
-const TIDE_TARGET_BELOW_SCREEN = -20; // where it "wants" to sit vs the screen bottom (− = just into view)
-const TIDE_CHASE_GAIN = 0.24; // extra rise speed per design px it lags below that target
-const TIDE_MAX_SPEED = 118; // cap: firm pressure, but never an un-outclimbable rocket
-const TIDE_START_EXTRA_PADDING_DESIGN = 120; // start even deeper for the first jumps
-const TIDE_START_GRACE_MS = 3000; // opening seconds where the tide barely moves
-const TIDE_START_GRACE_MAX_SPEED = 6; // max design px/s during the grace window
+// The player climbs at ~85–95 design px/s when bouncing cleanly, so a constant
+// 74 keeps the water just behind a competent climber — you stay ahead while you
+// keep moving, but any obstacle that knocks you back or slows your line lets it
+// close in. Scaled per map by tideMult (lagoon 1 / reef 1.15 / storm 1.35).
+// Only two things ever touch the rate: the opening grace, and the Ocean-Law
+// powerup (slows it briefly).
+const TIDE_SPEED = 92; // constant base rise (design px/s), same pace all run long
+const TIDE_START_OFFSET_DESIGN = 250; // how far below the first platform the tide starts
+const TIDE_START_GRACE_MS = 2500; // opening window where the tide barely moves
+const TIDE_START_GRACE_MAX_SPEED = 6; // max design px/s during that window
+// LEASH (hard rule): the tide is never more than tuning.maxMetersBelow METRES
+// below the seal, measured against a SMOOTHED seal height (an EMA of the seal's y)
+// so a one-off spring apex he falls back from doesn't yank the water up. A capped
+// catch-up closes the gap smoothly as it nears the leash, and a hard clamp
+// guarantees it never exceeds it — so the water stays just under you, always
+// visible and looming, and can never be escaped for good.
+const TIDE_CATCHUP_GAIN_M = 22; // extra design px/s of catch-up per metre beyond the leash
+const TIDE_CATCHUP_MAX = 130; // cap on the catch-up
+
+// ---- Positive-item spacing (metres) ----
+// Deterministic cadences so items never clump. Doubled from the first pass.
+const PEARL_SPACING_M = 16; // a pearl every ~16 m (occasional reward, not clutter)
+const POWERUP_SPACING_M = 48; // a power-up every ~48 m
+const LIFE_SPACING_M = 360; // a life every 360 m
+const FIRST_TRAP_M = 50; // generous onboarding: NO traps in the first ~50 m
+const LITTER_SPACING_M = 15; // metres between collectible ocean-trash pieces (cleanup mechanic)
 
 export default class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -91,14 +89,16 @@ export default class GameScene extends Phaser.Scene {
   private powerups!: Phaser.Physics.Arcade.Group;
   private hazards!: Phaser.Physics.Arcade.Group;
   private hearts!: Phaser.Physics.Arcade.Group;
+  private litter!: Phaser.Physics.Arcade.Group; // collectible ocean trash (the cleanup mechanic)
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private pointerDown = false;
   private pointerX = 0;
 
   private tideY = 0;
-  private tideSpeed = TIDE_BASE_SPEED; // design px per second, rises (decreasing y)
-  private baseTideSpeed = TIDE_BASE_SPEED;
+  private tideSpeed = TIDE_SPEED; // design px per second, rises (decreasing y)
+  private baseTideSpeed = TIDE_SPEED;
+  private tideSealRefY = 0; // smoothed seal height the leash measures against (0 = uninit)
   private runStartTime = 0;
   private tideSlowUntil = 0;
   private tideGraceUntil = 0; // opening grace: tide held gentle so the first jumps are safe
@@ -113,9 +113,19 @@ export default class GameScene extends Phaser.Scene {
   private lastPlatformY = 0;
   private lastPlatformX = 0;
   private difficultyLevel = 0;
-  // Rhythm counter: 0,1 = calm steps, 2 = "technical" step (bigger gap/offset,
-  // where special platforms + hazards concentrate). Cycles 0→1→2→0.
+  // Rhythm counter: 0,1 = calm steps, 2 = "technical" step (bigger gap/offset).
+  // Cycles 0→1→2→0.
   private stepInPattern = 0;
+  // Rock-type variety system (design guidelines): the last few platform kinds, to
+  // enforce fairness constraints (≤2 non-stable in a row, ≥1 stable per 5), and a
+  // counter so Bouncy springs are never placed two too close together.
+  private recentKinds: PlatKind[] = [];
+  private platsSinceSpring = 99;
+  // Near-miss beats (design guidelines): periodically stage a stable→move→break
+  // sequence — land on a drifting rock, then a crumbling one you must leave fast —
+  // for the "I only just made it" thrill. Always reachable/fair.
+  private nextNearMissMeter = 55;
+  private nearMissStage: 'none' | 'move' | 'break' = 'none';
 
   private invulnerableUntil = 0;
   private slipperyUntil = 0;
@@ -136,30 +146,58 @@ export default class GameScene extends Phaser.Scene {
   // Per-map gameplay modifiers (set from the selected map in create()).
   private hazardMult = 1;
   private coinMult = 1;
+  private mapTideMult = 1; // per-map tide multiplier; combined live with tuning.tideSpeed
 
   // Lives HUD (hearts). Lives are collected as ❤️ pickups while climbing.
   private livesText!: Phaser.GameObjects.Text;
   // World-y of the last heart spawned, to keep hearts rare and well-spaced.
-  private lastHeartY = 0;
+  // Deterministic item/trap placement, keyed by climb height in metres. Each is
+  // the next height at which that thing may appear; they self-correct after one
+  // placement (so a mid-run revive picks up cleanly).
+  // Height (m) of the LAST time each was placed — compared live against tuning.*
+  // each spawn, so changing a slider mid-run takes effect on the next platform.
+  private lastPearlMeter = 0;
+  private lastPowerupMeter = 0;
+  private lastLifeMeter = 0;
+  private lastLitterMeter = 0; // cadence for collectible trash (the cleanup mechanic)
+  private nextTrapMeter = FIRST_TRAP_M; // no traps before this, then randomised gaps
+  // Cleanup mechanic: collect trash to fill this gauge; when full a cleanup boat
+  // sweeps the screen and buys a tide breather. Run-local; reset each run.
+  private cleanupCount = 0;
+  private cleanupGoal = 8;
+  private trashThisRun = 0; // total trash collected this run (for the Game Over highlights)
+  private boatsThisRun = 0; // cleanup boats triggered this run (highlight)
+  private cleanupBarFill?: Phaser.GameObjects.Graphics;
+  private cleanupLabel?: Phaser.GameObjects.Text;
+  private boatBusy = false; // guards against re-triggering the boat mid-sweep
+  // Shuffle-bag of power-up kinds so the SAME one never repeats redundantly — each
+  // of the three is dealt once before any can appear again (varied across any run of 5).
+  private powerupBag: PowerupData['kind'][] = [];
 
   // Coins already banked to the profile for this session. Normally 0 (a run
   // banks everything when it ends), but a rewarded-ad revive carries forward
   // how much was banked at the previous death so the continued run only ever
   // banks the *new* coins collected afterwards — no double-counting.
   private bankedCoins = 0;
-  private reviveData: { meters: number; coins: number; bankedCoins: number } | null = null;
+  private reviveData: { meters: number; coins: number; bankedCoins: number; adRevived?: boolean } | null = null;
+  // True once an AD-revive has been used in this run chain — capped at 1/run so
+  // watching ads can't inflate a leaderboard score. (Heart revives are separate.)
+  private adRevivedThisRun = false;
 
   constructor() {
     super('GameScene');
   }
 
-  init(data?: { revive?: { meters: number; coins: number; bankedCoins: number } }) {
+  init(data?: { revive?: { meters: number; coins: number; bankedCoins: number; adRevived?: boolean } }) {
     this.reviveData = data?.revive ?? null;
+    this.adRevivedThisRun = data?.revive?.adRevived ?? false;
   }
 
   create() {
     gestureUnlock(this);
     this.isGameOver = false;
+    // CrazyGames: signal active gameplay (no-op off their portal).
+    crazyGameplayStart();
     // Mark that a run has begun this session — the title screen uses this to
     // require the ad on every subsequent PLAY (so the menu can't dodge it).
     this.registry.set('playedThisSession', true);
@@ -170,7 +208,8 @@ export default class GameScene extends Phaser.Scene {
     // spawn more hazards (but more coins). This is what makes each unlocked map
     // actually play differently, not just look different.
     const mapDef = MAPS.find((m) => m.id === st.selectedMap) ?? MAPS[0];
-    this.baseTideSpeed = TIDE_BASE_SPEED * mapDef.tideMult;
+    this.mapTideMult = mapDef.tideMult;
+    this.baseTideSpeed = tuning.tideSpeed * mapDef.tideMult;
     this.hazardMult = mapDef.hazardMult;
     this.coinMult = mapDef.coinMult;
 
@@ -192,12 +231,13 @@ export default class GameScene extends Phaser.Scene {
     this.powerups = this.physics.add.group({ allowGravity: false });
     this.hazards = this.physics.add.group({ allowGravity: false });
     this.hearts = this.physics.add.group({ allowGravity: false });
+    this.litter = this.physics.add.group({ allowGravity: false });
 
     // Player — sprite + optional tint from the selected skin.
     const skinDef = SKINS.find((s) => s.id === st.selectedSkin) ?? SKINS[0];
     this.player = this.physics.add.sprite(w / 2, h - S(160), skinDef.sprite);
     if (skinDef.tint !== undefined) this.player.setTint(skinDef.tint);
-    this.player.setScale(S(0.22));
+    this.player.setScale(S(0.28));
     this.player.setCollideWorldBounds(false);
     this.player.setBounce(0);
     this.player.setDepth(20);
@@ -211,6 +251,20 @@ export default class GameScene extends Phaser.Scene {
     this.scoreMeters = 0;
     this.difficultyLevel = 0;
     this.stepInPattern = 0;
+    this.lastPearlMeter = 0;
+    this.lastPowerupMeter = 0;
+    this.lastLifeMeter = 0;
+    this.lastLitterMeter = 0;
+    this.cleanupCount = 0;
+    this.trashThisRun = 0;
+    this.boatsThisRun = 0;
+    this.boatBusy = false;
+    this.nextTrapMeter = tuning.firstTrapM;
+    this.powerupBag = [];
+    this.recentKinds = [];
+    this.platsSinceSpring = 99;
+    this.nextNearMissMeter = 55;
+    this.nearMissStage = 'none';
 
     // Equal footing: a FRESH run always starts with 0 lives (persisted/bought
     // lives never carry in), so every player begins the same. Hearts collected
@@ -242,13 +296,12 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.powerups, this.handlePowerup, undefined, this);
     this.physics.add.overlap(this.player, this.hazards, this.handleHazard, undefined, this);
     this.physics.add.overlap(this.player, this.hearts, this.handleHeart, undefined, this);
+    this.physics.add.overlap(this.player, this.litter, this.handleLitter, undefined, this);
 
-    // Tide (rising ocean). Starts well below the opening platform so a slow
-    // first jump isn't an instant drown. (The extra padding means even a
-    // graceless first bounce — or the player immediately stalling on the
-    // opening platform — still has headroom before the first chase surge kicks
-    // in after the grace window.)
-    this.tideY = h + S(230) + S(TIDE_START_EXTRA_PADDING_DESIGN);
+    // Tide (rising ocean). Starts well below the opening platform so the first
+    // jumps are safe; from then on it rises at a constant speed.
+    this.tideY = h + S(TIDE_START_OFFSET_DESIGN);
+    this.tideSealRefY = 0; // re-init the leash reference each run (set to the seal on frame 1)
     this.tideSprite = this.add
       .tileSprite(w / 2, this.tideY, w, S(260), 'bg_storm')
       .setDepth(15)
@@ -272,7 +325,14 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(200);
 
     this.tideWarnText = this.add
-      .text(w - S(16), S(16), '', { fontFamily: FONT_BODY, fontSize: `${S(13)}px`, color: '#ffd166' })
+      .text(w - S(14), S(14), '', {
+        fontFamily: '"Baloo 2","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+        fontSize: `${S(21)}px`,
+        color: '#8fe3ff',
+        stroke: '#0b3d5c',
+        strokeThickness: S(5),
+        align: 'right',
+      })
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(200);
@@ -290,8 +350,30 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(200);
     this.updateLivesHud();
 
+    // Cleanup gauge (top-left, under the hearts): a small ♻️ bar that fills as you
+    // collect ocean trash. Full → the cleanup boat sweeps (see triggerCleanupBoat).
+    const barX = S(16);
+    const barY = S(78);
+    const barW = S(132);
+    const barH = S(12);
+    const gaugeBg = this.add.graphics().setScrollFactor(0).setDepth(199);
+    gaugeBg.fillStyle(0x0a2f47, 0.72);
+    gaugeBg.fillRoundedRect(barX, barY, barW, barH, S(6));
+    gaugeBg.lineStyle(S(1), 0x3a7f95, 0.7);
+    gaugeBg.strokeRoundedRect(barX, barY, barW, barH, S(6));
+    this.cleanupBarFill = this.add.graphics().setScrollFactor(0).setDepth(200);
+    this.cleanupLabel = this.add
+      .text(barX + barW + S(8), barY + barH / 2, '', {
+        fontFamily: '"Baloo 2","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+        fontSize: `${S(12)}px`,
+        color: '#7ff0e0',
+      })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(200);
+    this.updateCleanupGauge();
+
     this.highestY = this.player.y;
-    this.lastHeartY = this.player.y; // first heart must be climbed to
     this.scoreMeters = 0;
     this.coinsCollected = 0;
     this.bankedCoins = 0;
@@ -338,15 +420,30 @@ export default class GameScene extends Phaser.Scene {
 
   private drawTide(): void {
     const w = this.scale.width;
-    this.tideGraphics.clear();
-    this.tideGraphics.fillStyle(0x0b4f6c, 0.92);
-    this.tideGraphics.fillRect(-S(50), this.tideY, w + S(100), S(4000));
-    this.tideGraphics.fillStyle(0x1a7fa0, 0.9);
+    const g = this.tideGraphics;
+    g.clear();
     const t = this.time.now / 300;
-    for (let x = -S(50); x <= w + S(50); x += S(20)) {
-      const wave = Math.sin(x * 0.02 + t) * S(6);
-      this.tideGraphics.fillRect(x, this.tideY + wave - S(6), S(20), S(10));
-    }
+    const left = -S(60);
+    const right = w + S(60);
+    const step = S(20); // small step → smooth crest; it's still just 2 draw calls
+    const amp = S(7);
+    const crest = (x: number) => this.tideY + Math.sin(x * 0.02 + t) * amp;
+    // Water body: ONE filled polygon with a smooth wavy top edge — prettier and
+    // fewer draws than the old row of rectangles.
+    g.fillStyle(0x0b4f6c, 0.94);
+    g.beginPath();
+    g.moveTo(left, this.tideY + S(4000));
+    g.lineTo(left, crest(left));
+    for (let x = left; x <= right; x += step) g.lineTo(x, crest(x));
+    g.lineTo(right, this.tideY + S(4000));
+    g.closePath();
+    g.fillPath();
+    // Foam highlight running along the crest.
+    g.lineStyle(S(4), 0x59c6e6, 0.9);
+    g.beginPath();
+    g.moveTo(left, crest(left));
+    for (let x = left; x <= right; x += step) g.lineTo(x, crest(x));
+    g.strokePath();
   }
 
   private zoneFor(m: number): 0 | 1 | 2 {
@@ -356,11 +453,87 @@ export default class GameScene extends Phaser.Scene {
   /** Soft outer glow so every interactable reads at a glance (Rule of
    *  Distinction). GPU-only (WebGL); silently no-ops on the Canvas renderer. */
   private glow(obj: any, color: number, strength = 4) {
+    // Each preFX glow is a per-object shader pass — cheap on desktop, a real FPS
+    // drain on mobile GPUs. Skip on non-desktop; items stay readable by shape/colour.
+    if (!this.game.device.os.desktop) return;
     try {
       obj.preFX?.addGlow?.(color, strength, 0);
     } catch {
       /* Canvas renderer — no preFX pipeline */
     }
+  }
+
+  /** Draw the next power-up kind from a shuffle-bag: all three are dealt once
+   *  before any repeats, so the same power-up never appears redundantly. */
+  private drawPowerup(): PowerupData['kind'] {
+    // 'law' (tide-slower) removed on request — only the dolphin boost and turtle
+    // shield remain, so nothing ever tampers with the tide's steady pace.
+    if (this.powerupBag.length === 0) {
+      this.powerupBag = Phaser.Utils.Array.Shuffle<PowerupData['kind']>(['dolphin', 'shield']);
+    }
+    return this.powerupBag.pop()!;
+  }
+
+  /** Height-scaled probability table for the platform kind (design guidelines).
+   *  Slippery is gated to >1200 m. Returns a raw weighted pick — constraints are
+   *  applied by chooseKind(). */
+  private weightedKind(m: number): PlatKind {
+    // More variety than a stable-heavy start (user request): springs & moving
+    // rocks (the fun ones) are common early, breakables kept moderate, and the
+    // slippery rock unlocks from 400 m instead of 1200 m.
+    let normal: number, brk: number, move: number, spring: number, slip: number;
+    if (m < 400) {
+      normal = 52; brk = 14; move = 17; spring = 17; slip = 0;
+    } else if (m < 1000) {
+      normal = 42; brk = 18; move = 18; spring = 15; slip = 7;
+    } else if (m < 2000) {
+      normal = 33; brk = 22; move = 18; spring = 15; slip = 12;
+    } else {
+      normal = 25; brk = 22; move = 20; spring = 16; slip = 17;
+    }
+    // Live variety knob: scales the non-stable weights up/down (stable stays fixed).
+    const vy = tuning.variety;
+    brk *= vy; move *= vy; spring *= vy; slip *= vy;
+    let roll = Math.random() * (normal + brk + move + spring + slip);
+    if ((roll -= normal) < 0) return 'normal';
+    if ((roll -= brk) < 0) return 'break';
+    if ((roll -= move) < 0) return 'move';
+    if ((roll -= spring) < 0) return 'spring';
+    return 'slip';
+  }
+
+  /** Choose the next platform kind with the guidelines' hard fairness constraints:
+   *  after a big gap force a safe landing; never >2 non-stable in a row; ≥1 stable
+   *  every 5; and Bouncy springs never two too close. */
+  private chooseKind(platMeter: number, gapDesign: number, forced?: PlatKind): PlatKind {
+    this.platsSinceSpring++;
+    let kind: PlatKind;
+
+    if (forced) {
+      // Near-miss beat (see generatePlatformAt) — kept here so bookkeeping
+      // (recentKinds / spring spacing) stays consistent.
+      kind = forced;
+    } else if (gapDesign > MAX_SAFE_GAP * 0.92) {
+      // Big reach → the landing must be dependable (Stable, or an occasional Bouncy).
+      kind = this.platsSinceSpring >= 3 && Math.random() < 0.4 ? 'spring' : 'normal';
+    } else {
+      const recent = this.recentKinds;
+      const last = recent[recent.length - 1];
+      const prev = recent[recent.length - 2];
+      const trailingNonStable = (last && last !== 'normal' ? 1 : 0) + (prev && prev !== 'normal' ? 1 : 0);
+      const noStableInLast4 = recent.length >= 4 && !recent.slice(-4).includes('normal');
+      if (trailingNonStable >= 2 || noStableInLast4) {
+        kind = 'normal'; // guarantee a solid rock so there's always a safe path
+      } else {
+        kind = this.weightedKind(platMeter);
+        if (kind === 'spring' && this.platsSinceSpring < 3) kind = 'normal'; // no two springs too close
+      }
+    }
+
+    if (kind === 'spring') this.platsSinceSpring = 0;
+    this.recentKinds.push(kind);
+    if (this.recentKinds.length > 6) this.recentKinds.shift();
+    return kind;
   }
 
   /** Vertical gap (DESIGN px). Zone-based + rhythmic: onboarding is easy and
@@ -406,143 +579,127 @@ export default class GameScene extends Phaser.Scene {
     const margin = S(46);
     const y = this.lastPlatformY - S(gapDesign);
     const x = Phaser.Math.Clamp(this.lastPlatformX + S(offsetDesign), margin, w - margin);
-    this.generatePlatformAt(x, y, technical);
+    this.generatePlatformAt(x, y, gapDesign);
   }
 
-  private generatePlatformAt(x: number, y: number, technical = false) {
+  private generatePlatformAt(x: number, y: number, gapDesign = MIN_GAP) {
     const w = this.scale.width;
     const margin = S(46);
-    const zone = this.zoneFor(this.scoreMeters);
+    const platMeter = this.scoreMeters + (this.player.y - y) / S(20);
 
-    // Platform kind by zone + rhythm. Onboarding teaches on solid ground (normal,
-    // the odd spring). Special mechanics (break/move) appear from the flow zone
-    // and mostly on technical steps, so the two calm steps stay dependable.
-    let kind: PlatKind = 'normal';
-    const r = Math.random();
-    if (zone === 0) {
-      if (r < 0.14) kind = 'spring';
-    } else if (zone === 1) {
-      if (technical) {
-        if (r < 0.16) kind = 'break';
-        else if (r < 0.4) kind = 'move';
-        else if (r < 0.52) kind = 'spring';
-      } else if (r < 0.14) kind = 'spring';
-    } else {
-      if (technical) {
-        if (r < 0.24) kind = 'break';
-        else if (r < 0.52) kind = 'move';
-        else if (r < 0.62) kind = 'spring';
-      } else if (r < 0.16) kind = 'spring';
-      else if (r < 0.24) kind = 'move';
+    // Rock/platform TYPE is the primary source of variety (design guidelines):
+    // height-scaled probability tables + hard fairness constraints. Five kinds —
+    // Stable / Crumbling(break) / Moving(move) / Bouncy(spring) / Slippery(slip).
+    //
+    // NEAR-MISS BEAT: every ~24-34 m (after the 55 m onboarding), and only on a
+    // comfortable-gap step launched from a stable rock, stage move→break — a
+    // drifting platform followed by a crumbling one you must leave quickly. Only
+    // ever forces this pair; the fairness constraints resume right after.
+    let forced: PlatKind | undefined;
+    const comfyGap = gapDesign <= MAX_SAFE_GAP * 0.85;
+    if (comfyGap) {
+      if (this.nearMissStage === 'break') {
+        forced = 'break';
+        this.nearMissStage = 'none';
+      } else if (this.nearMissStage === 'move') {
+        forced = 'move';
+        this.nearMissStage = 'break';
+      } else if (platMeter >= this.nextNearMissMeter && this.recentKinds[this.recentKinds.length - 1] === 'normal') {
+        forced = 'move';
+        this.nearMissStage = 'break';
+        this.nextNearMissMeter = platMeter + Phaser.Math.Between(24, 34);
+      }
     }
-
+    const kind = this.chooseKind(platMeter, gapDesign, forced);
     this.spawnPlatform(x, y, kind);
 
-    // Pearls — three tiers now so collecting feels varied instead of identical
-    // every time. The spawn balance is tuned per zone + per platform kind:
-    //   • Calm platforms → mostly COMMON pearls (1-value, the stable baseline).
-    //   • Technical platforms → higher overall drop rate, with a much larger
-    //     share of RARE/EPIC pearls because those jumps are the risky ones.
-    // All three tiers share the same physics (no gravity, same depth/tween) so
-    // gameplay behaviour is identical — only the reward + visual punch differ.
-    type PearlTier = 'common' | 'rare' | 'epic';
-    const pearlValues: Record<PearlTier, number> = { common: 1, rare: 3, epic: 8 };
-    const pearlScales: Record<PearlTier, number> = { common: 0.14, rare: 0.16, epic: 0.19 };
-    const pearlGlows: Record<PearlTier, number> = { common: 0xffe08a, rare: 0xff8fd8, epic: 0xb388ff };
-    const pearlTints: Record<PearlTier, number> = { common: 0xffffff, rare: 0xffc0e8, epic: 0xd9c6ff };
-    const pickPearlTier = (r: number, tech: boolean): PearlTier => {
-      const roll = Math.random();
-      const common = tech ? (r < 0.6 ? 0.72 : 0.82) : (r < 0.2 ? 0.94 : 0.88);
-      const rare = tech ? 0.88 : 0.975;
-      if (roll < common) return 'common';
-      if (roll < rare) return 'rare';
-      return 'epic';
-    };
-    const coinChance = (technical ? 0.46 : 0.24) * this.coinMult;
-    if (Math.random() < Math.min(0.52, coinChance)) {
-      const cluster = technical && Math.random() < 0.38 ? 3 : 1;
-      for (let i = 0; i < cluster; i++) {
-        const tier = pickPearlTier(Math.random(), technical);
-        const cx = Phaser.Math.Clamp(x + S((i - (cluster - 1) / 2) * 26), margin, w - margin);
-        const coin = this.coins.create(cx, y - S(30), 'coin_pearl');
-        coin.setData('tier', tier);
-        coin.setData('value', pearlValues[tier]);
-        coin.setScale(S(pearlScales[tier]));
-        coin.setTint(pearlTints[tier]);
-        coin.body.setAllowGravity(false);
-        coin.setDepth(19);
-        this.glow(coin, pearlGlows[tier], tier === 'epic' ? 8 : tier === 'rare' ? 6 : 4);
-        const bob = tier === 'epic' ? 9 : tier === 'rare' ? 7 : 6;
-        this.tweens.add({
-          targets: coin,
-          y: coin.y - S(bob),
-          duration: tier === 'epic' ? 600 : 700,
-          yoyo: true,
-          repeat: -1,
-          ease: 'sine.inOut',
-        });
-        if (tier === 'epic') {
-          this.tweens.add({ targets: coin, angle: 360, duration: 2200, repeat: -1 });
-        }
-      }
-    }
+    // ---- Item + trap placement — deterministic cadences so nothing clumps ----
+    // Positive items sit on a fixed grid (pearl · power-up · life); traps use a
+    // randomised grid + random type. All "next…Meter" trackers self-correct after
+    // one placement, so a revive at height picks up cleanly.
 
-    // Power-ups: uncommon, now bigger with a type-coloured halo so the three
-    // kinds read apart instantly (dolphin=cyan, law=blue, shield=green).
-    if (Math.random() < 0.06) {
-      const kinds: PowerupData['kind'][] = ['dolphin', 'law', 'shield'];
-      const k = Phaser.Utils.Array.GetRandom(kinds);
-      const spriteKey = k === 'dolphin' ? 'powerup_dolphin' : k === 'law' ? 'powerup_law' : 'powerup_shield';
-      const pu = this.powerups.create(x + Phaser.Math.Between(-S(16), S(16)), y - S(46), spriteKey);
+    // POWER-UP — every ~48 m. Rendered as a clean EMOJI ("in nothing" — no bubble/
+    // circle art), kind chosen from a shuffle-bag so it never repeats redundantly.
+    let positivePlaced = false;
+    if (platMeter - this.lastPowerupMeter >= tuning.powerupSpacingM) {
+      this.lastPowerupMeter = platMeter;
+      const k = this.drawPowerup();
+      const emoji = k === 'dolphin' ? '🐬' : k === 'law' ? '📜' : '🐢';
+      const pu = this.add.text(x, y - S(48), emoji, { fontSize: `${S(40)}px` }).setOrigin(0.5).setDepth(19);
+      this.physics.add.existing(pu);
+      this.powerups.add(pu as any);
       pu.setData('kind', k);
-      pu.setScale(S(0.17));
-      pu.body.setAllowGravity(false);
-      pu.setDepth(19);
-      this.glow(pu, k === 'dolphin' ? 0x4ff0ff : k === 'law' ? 0x6db8ff : 0x7dff9e, 6);
-      this.tweens.add({ targets: pu, angle: 360, duration: 3000, repeat: -1 });
-    }
-
-    // Heart pickup — a collectible extra life. Kept RARE and well-spaced (~110 m
-    // between hearts) and only while below the life cap so none are wasted.
-    if (getState().lives < MAX_LIVES && this.lastHeartY - y > S(2200) && Math.random() < 0.06) {
-      const heart = this.add
-        .text(x + Phaser.Math.Between(-S(18), S(18)), y - S(46), '❤️', { fontSize: `${S(26)}px` })
-        .setOrigin(0.5)
-        .setDepth(19);
-      this.physics.add.existing(heart);
-      this.hearts.add(heart as any);
-      const body = heart.body as Phaser.Physics.Arcade.Body;
+      const body = pu.body as Phaser.Physics.Arcade.Body;
       body.setAllowGravity(false);
-      body.setSize(S(24), S(24));
-      this.tweens.add({ targets: heart, y: heart.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
-      this.lastHeartY = y;
+      body.setSize(S(38), S(38));
+      this.tweens.add({ targets: pu, y: pu.y - S(7), duration: 800, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      positivePlaced = true;
+    } else if (platMeter - this.lastLifeMeter >= tuning.lifeSpacingM) {
+      // LIFE — kept on the grid (skipped silently when already full).
+      this.lastLifeMeter = platMeter;
+      if (getState().lives < MAX_LIVES) {
+        const heart = this.add.text(x, y - S(46), '❤️', { fontSize: `${S(36)}px` }).setOrigin(0.5).setDepth(19);
+        this.physics.add.existing(heart);
+        this.hearts.add(heart as any);
+        const body = heart.body as Phaser.Physics.Arcade.Body;
+        body.setAllowGravity(false);
+        body.setSize(S(34), S(34));
+        this.tweens.add({ targets: heart, y: heart.y - S(6), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+        positivePlaced = true;
+      }
     }
 
-    // Hazards: NONE during onboarding (<300 m) so new players learn the jump
-    // safely (removes the old un-telegraphed spike). From the flow zone they
-    // appear, concentrated on technical steps, ramping with height. The deadly
-    // lunging threats (shark, poacher) hold back until the mastery zone (>800 m).
-    // Always to the side — never walling the only path.
-    if (this.scoreMeters >= ONBOARDING_M) {
-      const base = zone === 2 ? 0.16 : 0.08;
-      let hazChance = Math.min(0.34, (base + this.difficultyLevel * 0.015) * this.hazardMult);
-      if (!technical) hazChance *= 0.4; // keep the calm steps mostly clear
-      if (Math.random() < hazChance) {
-        const hazOffset = Phaser.Math.Between(-S(70), S(70));
-        const hx = Phaser.Math.Clamp(x + hazOffset, margin, w - margin);
-        const roll = Math.random();
-        let hk: HazardKind = 'trash';
-        if (this.scoreMeters > FLOW_M) {
-          if (roll < 0.2) hk = 'shark';
-          else if (roll < 0.38) hk = 'human';
-          else if (roll < 0.55) hk = 'rock';
-          else if (roll < 0.75) hk = 'oil';
-        } else {
-          if (this.difficultyLevel > 4 && roll < 0.22) hk = 'rock';
-          else if (this.difficultyLevel > 2 && roll < 0.5) hk = 'oil';
-        }
-        this.spawnHazard(hx, y - S(58), hk, w, margin);
-      }
+    // PEARL — every ~5 m, skipped on a platform that already took a power-up/life
+    // so the two never sit on top of each other. Bigger, plain gold-glow pearl.
+    if (!positivePlaced && platMeter - this.lastPearlMeter >= tuning.pearlSpacingM) {
+      this.lastPearlMeter = platMeter;
+      const coin = this.coins.create(x + Phaser.Math.Between(-S(12), S(12)), y - S(34), 'coin_pearl');
+      coin.setScale(S(0.2));
+      coin.body.setAllowGravity(false);
+      coin.setDepth(19);
+      this.glow(coin, 0xfff2b0, 6);
+      this.tweens.add({ targets: coin, y: coin.y - S(7), duration: 700, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+    }
+
+    // LITTER — collectible ocean trash on its own cadence, placed a step to ONE
+    // SIDE (a small detour off the straight climb line) so grabbing it is a
+    // positioning CHOICE, not automatic. Harmless (no damage): fills the cleanup
+    // gauge → the boat sweep. This is the game's signature "clean the ocean" loop.
+    if (platMeter >= FIRST_TRAP_M * 0.5 && platMeter - this.lastLitterMeter >= LITTER_SPACING_M) {
+      this.lastLitterMeter = platMeter;
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const lx = Phaser.Math.Clamp(x + side * Phaser.Math.Between(S(70), S(120)), margin, w - margin);
+      this.spawnLitter(lx, y - Phaser.Math.Between(S(30), S(70)));
+    }
+
+    // TRAP — RARE and always DODGEABLE (guidelines: never block the only path,
+    // generous start). None before FIRST_TRAP_M. Random type from a pool that
+    // already has variety at the FIRST trap (trash + oil), widening with height so
+    // it's never "always the same sack". Placed clearly to ONE SIDE, well off the
+    // straight-up bounce line, so the player can always steer around it — never a
+    // dead end. Sparse spacing (~30-50 m early → ~16-28 m high), ÷hazardMult.
+    if (platMeter >= this.nextTrapMeter) {
+      // Trash is no longer a hazard — it's the collectible for the cleanup mechanic
+      // (spawned separately below). Real dangers only: oil, then rock/poacher/shark.
+      const pool: HazardKind[] = ['oil'];
+      if (platMeter >= 200) pool.push('rock');
+      if (platMeter >= 450) pool.push('human');
+      if (platMeter >= 800) pool.push('shark');
+      const hk = Phaser.Utils.Array.GetRandom(pool);
+      // Place the trap IN the ascent corridor just above this platform, only a
+      // modest step to one side — so it's actually on the route the seal jumps
+      // through (a real, timed dodge) instead of floating far out in open water.
+      // Bias to the side away from where the seal came from so it reads as an
+      // obstacle "ahead", and there's always a clear lane on the other side.
+      const side = this.lastPlatformX > x ? -1 : this.lastPlatformX < x ? 1 : Math.random() < 0.5 ? -1 : 1;
+      const hx = Phaser.Math.Clamp(x + side * Phaser.Math.Between(S(46), S(88)), margin, w - margin);
+      this.spawnHazard(hx, y - Phaser.Math.Between(S(50), S(80)), hk, w, margin);
+      const t = Phaser.Math.Clamp(platMeter / 3000, 0, 1);
+      const gap = Phaser.Math.Between(
+        Math.round(Phaser.Math.Linear(30, 16, t)),
+        Math.round(Phaser.Math.Linear(50, 28, t))
+      );
+      this.nextTrapMeter = platMeter + Math.max(10, (gap * tuning.trapRarity) / this.hazardMult);
     }
 
     this.lastPlatformY = y;
@@ -560,7 +717,7 @@ export default class GameScene extends Phaser.Scene {
       const speed = S(150 + Math.min(this.difficultyLevel * 7, 110));
       const dir = fromLeft ? 1 : -1;
       const shark = this.add
-        .text(startX, y, '🦈', { fontSize: `${S(32)}px` })
+        .text(startX, y, '🦈', { fontSize: `${S(38)}px` })
         .setOrigin(0.5)
         .setDepth(19)
         .setFlipX(fromLeft);
@@ -585,7 +742,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (kind === 'human') {
       // A poacher diver drifting side to side — bump them and you get knocked back.
-      const human = this.add.text(x, y, '🤿', { fontSize: `${S(26)}px` }).setOrigin(0.5).setDepth(19);
+      const human = this.add.text(x, y, '🤿', { fontSize: `${S(31)}px` }).setOrigin(0.5).setDepth(19);
       this.physics.add.existing(human);
       this.hazards.add(human as any);
       const body = human.body as Phaser.Physics.Arcade.Body;
@@ -627,7 +784,7 @@ export default class GameScene extends Phaser.Scene {
         onComplete: () => thrower.destroy(),
       });
 
-      const rock = this.add.text(startX, y, '🪨', { fontSize: `${S(22)}px` }).setOrigin(0.5).setDepth(19);
+      const rock = this.add.text(startX, y, '🪨', { fontSize: `${S(27)}px` }).setOrigin(0.5).setDepth(19);
       this.physics.add.existing(rock);
       // Cast to `any` here on purpose: Group.add()'s TS typings want a
       // GameObjectWithBody with a *required* body property, but Text's
@@ -646,41 +803,47 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (kind === 'oil') {
-      const oil = this.add.ellipse(x, y, S(64), S(24), 0x090909, 0.82).setDepth(17);
+      // Depth 19 (above platforms) so the slick is never hidden beneath one, with
+      // a purple rim so it reads as a distinct SLIP hazard (not a damage one).
+      const oil = this.add.ellipse(x, y, S(66), S(26), 0x0a0a12, 0.85).setDepth(19).setStrokeStyle(S(2), 0x7b5cff, 0.9);
       this.physics.add.existing(oil);
       this.hazards.add(oil as any); // see rock's comment above
       const body = oil.body as Phaser.Physics.Arcade.Body;
       body.setAllowGravity(false);
-      body.setSize(S(56), S(18));
+      body.setSize(S(58), S(20));
       oil.setData('kind', 'oil');
-      this.tweens.add({ targets: oil, alpha: 0.45, duration: 900, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      this.glow(oil, 0x9b6bff, 5);
+      this.tweens.add({ targets: oil, alpha: 0.5, duration: 900, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       return;
     }
 
-    // trash (default) — floating plastic debris drifting side to side.
+    // trash (default) — floating plastic debris drifting side to side. The bag art
+    // is teal (same family as the water), so a strong red danger halo + a bigger
+    // size make it read as a threat at a glance rather than blending in.
     const hz = this.hazards.create(x, y, 'trash_hazard');
-    hz.setScale(S(0.13));
+    hz.setScale(S(0.21));
     hz.body.setAllowGravity(false);
+    // Fair, forgiving hitbox (smaller than the art, which has transparent padding)
+    // and NO horizontal drift — it stays put in its lane so it can be read and
+    // steered around, never wandering into the player's path. The 0.4 factor keeps
+    // the hitbox roughly unchanged even though the art is now a bit bigger.
+    hz.body.setSize(hz.width * 0.4, hz.height * 0.4);
     hz.setDepth(19);
     hz.setData('kind', 'trash');
-    this.glow(hz, 0xff7a3d, 4);
-    this.tweens.add({
-      targets: hz,
-      x: Phaser.Math.Clamp(x + Phaser.Math.Between(-S(40), S(40)), margin, w - margin),
-      duration: 2000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'sine.inOut',
-    });
+    this.glow(hz, 0xff3b2f, 8);
+    this.tweens.add({ targets: hz, y: hz.y - S(6), duration: 900, yoyo: true, repeat: -1, ease: 'sine.inOut' });
   }
 
   private spawnPlatform(x: number, y: number, kind: PlatKind) {
+    // Slippery reuses the normal rock art with an icy-blue tint so it reads as
+    // "slick" at a glance (colour-coded affordance, per the guidelines).
     const key =
-      kind === 'normal' ? 'platform_normal' : kind === 'move' ? 'platform_move' : kind === 'break' ? 'platform_break' : 'platform_spring';
+      kind === 'move' ? 'platform_move' : kind === 'break' ? 'platform_break' : kind === 'spring' ? 'platform_spring' : 'platform_normal';
     const plat = this.platforms.create(x, y, key) as Phaser.Physics.Arcade.Sprite;
-    plat.setScale(S(0.16));
+    plat.setScale(S(0.21));
     plat.refreshBody();
     plat.setSize(plat.width * 0.9, plat.height * 0.5);
+    if (kind === 'slip') plat.setTint(0x8fd3ff);
     plat.setData('kind', kind);
     plat.setDepth(18);
     if (kind === 'move') {
@@ -714,33 +877,33 @@ export default class GameScene extends Phaser.Scene {
     }
     const jumpVel = kind === 'spring' ? -S(SPRING_JUMP_VEL) : -S(NORMAL_JUMP_VEL);
     this.player.setVelocityY(jumpVel);
+    if (kind === 'slip') {
+      // Slippery rock — a LIGHT horizontal drift + brief sluggish steering. Milder
+      // than an oil slick: you skid a little off your line, adding a moment of
+      // recovery rather than a punishing slide.
+      const dir = this.player.body!.velocity.x >= 0 ? 1 : -1;
+      this.player.setVelocityX(this.player.body!.velocity.x + dir * S(130));
+      this.slipperyUntil = this.time.now + 850;
+    }
     playSfx('jump');
     this.cameras.main.shake(kind === 'spring' ? 90 : 40, kind === 'spring' ? 0.006 : 0.002);
     this.tweens.killTweensOf(this.player);
-    this.player.setScale(S(0.26), S(0.16));
-    this.tweens.add({ targets: this.player, scaleX: S(0.22), scaleY: S(0.22), duration: 180, ease: 'back.out' });
+    this.player.setScale(S(0.34), S(0.2));
+    this.tweens.add({ targets: this.player, scaleX: S(0.28), scaleY: S(0.28), duration: 180, ease: 'back.out' });
   }
 
   private handleCoin(_player: any, coinObj: any) {
-    const tier = (coinObj.getData('tier') ?? 'common') as 'common' | 'rare' | 'epic';
-    const baseValue = (coinObj.getData('value') as number) ?? 1;
     coinObj.destroy();
-    // Combo: grabbing coins in quick succession (within the 900ms window)
-    // ramps the payout up to +5 on top of the pearl's tier base value.
-    // RARE pearls pay +3 + combo and EPIC pearls pay +8 + combo, so they
-    // punch noticeably above the common 1-value baseline without blowing
-    // the economy out of scale.
+    // Combo: grabbing pearls in quick succession (within the 900ms window) ramps
+    // the payout up to +5 per pearl; letting the window lapse resets the chain.
     const now = this.time.now;
     if (now > this.comboTimer) this.comboCoins = 0;
     this.comboCoins += 1;
     this.comboTimer = now + 900;
-    const comboBonus = Math.min(this.comboCoins, 5);
-    const gained = baseValue + (tier === 'common' ? comboBonus : 0);
-    this.coinsCollected += gained;
+    const bonus = Math.min(this.comboCoins, 5);
+    this.coinsCollected += bonus;
     playSfx('coin');
-    const tierLabel = tier === 'epic' ? '✨ ' : tier === 'rare' ? '💎 ' : '';
-    const color = tier === 'epic' ? '#c792ff' : tier === 'rare' ? '#ff8bc8' : '#ffd166';
-    this.floatText(`${tierLabel}+${gained} 🦪`, this.player.x, this.player.y - S(40), color);
+    this.floatText(`+${bonus} 🦪`, this.player.x, this.player.y - S(40), '#ffd166');
   }
 
   private handleHeart(_player: any, heartObj: any) {
@@ -750,6 +913,99 @@ export default class GameScene extends Phaser.Scene {
       this.updateLivesHud();
       this.floatText('+1 Life ❤️', this.player.x, this.player.y - S(50), '#ef476f');
     }
+  }
+
+  /** Spawn one collectible ocean-trash piece. Harmless — a friendly cyan "grab me"
+   *  glow + a ♻ badge, NOT the red danger halo the old trash trap used. */
+  private spawnLitter(x: number, y: number) {
+    const t = this.litter.create(x, y, 'trash_hazard');
+    t.setScale(S(0.19));
+    t.body.setAllowGravity(false);
+    t.body.setSize(t.width * 0.6, t.height * 0.6); // generous grab box (it's a reward)
+    t.setDepth(19);
+    this.glow(t, 0x2ee6c8, 6); // cyan = collectible/good, not a threat
+    this.tweens.add({ targets: t, y: t.y - S(6), duration: 900, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+    const tag = this.add.text(x, y - S(24), '♻️', { fontSize: `${S(15)}px` }).setOrigin(0.5).setDepth(19);
+    t.setData('tag', tag);
+    this.tweens.add({ targets: tag, y: tag.y - S(6), duration: 900, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+  }
+
+  private handleLitter(_player: any, litterObj: any) {
+    const tag = litterObj.getData('tag') as Phaser.GameObjects.Text | undefined;
+    if (tag) tag.destroy();
+    litterObj.destroy();
+    playSfx('coin');
+    addTrashCleaned(1);
+    this.cleanupCount += 1;
+    this.trashThisRun += 1;
+    this.floatText('♻️ +1', this.player.x, this.player.y - S(46), '#7ff0e0');
+    if (this.cleanupCount >= this.cleanupGoal && !this.boatBusy) this.triggerCleanupBoat();
+    else this.updateCleanupGauge();
+  }
+
+  /** Cleanup boat: sweeps the screen, clears on-screen dangers + remaining litter,
+   *  and buys a tide breather (recede + slow ~3.5 s). The payoff for a full gauge. */
+  private triggerCleanupBoat() {
+    this.boatBusy = true;
+    this.cleanupCount = 0;
+    this.boatsThisRun += 1;
+    this.updateCleanupGauge();
+    const w = this.scale.width;
+    const camTop = this.cameras.main.scrollY;
+    const camBot = camTop + this.scale.height;
+    playSfx('powerup');
+    this.floatText('🚢 Ocean cleaned!', this.player.x, this.player.y - S(62), '#7ff0e0');
+    this.cameras.main.flash(220, 120, 240, 220);
+
+    // Clear on-screen dangers with a little poof.
+    (this.hazards.getChildren() as any[]).slice().forEach((hz: any) => {
+      if (hz && typeof hz.y === 'number' && hz.y > camTop - S(60) && hz.y < camBot + S(60)) {
+        this.tweens.add({ targets: hz, alpha: 0, scale: 0, duration: 220, onComplete: () => hz.destroy() });
+      }
+    });
+    // Vacuum any remaining litter on screen (bonus cleanup).
+    (this.litter.getChildren() as any[]).slice().forEach((lt: any) => {
+      const tag = lt.getData?.('tag') as Phaser.GameObjects.Text | undefined;
+      if (tag) tag.destroy();
+      addTrashCleaned(1);
+      lt.destroy();
+    });
+
+    // Tide breather: recede a little + slow it for a few seconds (reuses tideSlow).
+    this.tideY += S(150);
+    this.tideSlowUntil = this.time.now + 3500;
+
+    // The boat: a big emoji sweeping across, screen-fixed so the camera can't drift it.
+    const boat = this.add
+      .text(-S(80), this.scale.height * 0.32, '🚢', { fontSize: `${S(56)}px` })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(210);
+    this.tweens.add({
+      targets: boat,
+      x: w + S(80),
+      duration: 1400,
+      ease: 'sine.inOut',
+      onComplete: () => {
+        boat.destroy();
+        this.boatBusy = false;
+      },
+    });
+  }
+
+  private updateCleanupGauge() {
+    if (!this.cleanupBarFill) return;
+    const barX = S(16);
+    const barY = S(78);
+    const barW = S(132);
+    const barH = S(12);
+    const pct = Phaser.Math.Clamp(this.cleanupCount / this.cleanupGoal, 0, 1);
+    this.cleanupBarFill.clear();
+    if (pct > 0) {
+      this.cleanupBarFill.fillStyle(0x2ee6c8, 0.95);
+      this.cleanupBarFill.fillRoundedRect(barX + S(1.5), barY + S(1.5), Math.max(S(4), (barW - S(3)) * pct), barH - S(3), S(5));
+    }
+    if (this.cleanupLabel) this.cleanupLabel.setText(`♻️ ${this.cleanupCount}/${this.cleanupGoal}`);
   }
 
   private handlePowerup(_player: any, puObj: any) {
@@ -798,14 +1054,19 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (kind === 'oil') {
-      // Doesn't knock you off — it makes you slip: steering gets sluggish
-      // for a few seconds. No punt, but genuinely risky near a tight gap
-      // since you can't correct your line as fast. The slick itself
-      // stays put (it's a hazard patch, not a one-shot pickup).
-      this.slipperyUntil = this.time.now + 2500;
-      this.invulnerableUntil = this.time.now + 2500;
-      this.cameras.main.shake(80, 0.004);
-      this.floatText('Slipped on an oil slick! 🛢️', this.player.x, this.player.y - S(40), '#7fdfff');
+      // OIL SLICK — a real SLIP. Seally skids sideways the way he was already
+      // drifting (or a random side if steady) and can't correct for ~2 s: steering
+      // goes sluggish so he keeps sliding across, leaning into the skid. Doesn't
+      // knock him down, but on a tight line it's genuinely dangerous. The slick
+      // stays put (a patch, not a pickup); brief i-frames stop instant re-triggers.
+      const vx = this.player.body!.velocity.x;
+      const dir = Math.abs(vx) > S(20) ? Math.sign(vx) : Math.random() < 0.5 ? -1 : 1;
+      this.player.setVelocityX(dir * S(340)); // the skid
+      this.slipperyUntil = this.time.now + 1900; // sluggish steering — can't stop the slide
+      this.invulnerableUntil = this.time.now + 1200;
+      this.cameras.main.shake(140, 0.005);
+      playSfx('click');
+      this.floatText('Slipping! 🛢️', this.player.x, this.player.y - S(40), '#b39dff');
       return;
     }
 
@@ -852,18 +1113,12 @@ export default class GameScene extends Phaser.Scene {
     if (this.cursors.left.isDown) moveX = -1;
     else if (this.cursors.right.isDown) moveX = 1;
     else if (this.pointerDown) {
-      const diff = this.pointerX - this.player.x;
-      const absDesign = Math.abs(diff) / S(1);
-      const sign = Math.sign(diff);
-      if (absDesign <= POINTER_STEER_DEAD_DESIGN) {
-        moveX = 0;
-      } else if (absDesign <= POINTER_STEER_SOFT_DESIGN) {
-        const t = (absDesign - POINTER_STEER_DEAD_DESIGN) / Math.max(1, POINTER_STEER_SOFT_DESIGN - POINTER_STEER_DEAD_DESIGN);
-        moveX = sign * Phaser.Math.Interpolation.Linear([0, POINTER_STEER_SOFT_FRACTION], t);
-      } else {
-        const t = Phaser.Math.Clamp((absDesign - POINTER_STEER_SOFT_DESIGN) / Math.max(1, POINTER_STEER_FULL_DESIGN - POINTER_STEER_SOFT_DESIGN), 0, 1);
-        moveX = sign * Phaser.Math.Interpolation.Linear([POINTER_STEER_SOFT_FRACTION, 1], t);
-      }
+      // Half-screen steering, relative to the screen centre (NOT the seal): touch
+      // the left half → full left, the right half → full right. Only a thin dead
+      // band at the centre line gives 0 (avoids jitter on a dead-centre hold).
+      const diff = this.pointerX - w / 2;
+      if (Math.abs(diff) <= S(TOUCH_CENTER_DEADBAND_DESIGN)) moveX = 0;
+      else moveX = diff < 0 ? -1 : 1;
     }
     const speedMult = this.time.now < this.speedBoostUntil ? 1.5 : 1;
     const targetVX = moveX * S(MOVE_SPEED) * speedMult;
@@ -922,54 +1177,56 @@ export default class GameScene extends Phaser.Scene {
 
     // Cleanup platforms/coins far below
     const cleanupY = this.player.y + S(700);
-    [this.platforms, this.coins, this.powerups, this.hazards, this.hearts].forEach((group) => {
+    [this.platforms, this.coins, this.powerups, this.hazards, this.hearts, this.litter].forEach((group) => {
       group.children.iterate((obj: any) => {
-        if (obj && obj.y > cleanupY) obj.destroy();
+        if (obj && obj.y > cleanupY) {
+          const tag = obj.getData?.('tag'); // litter carries a ♻ badge — destroy it too
+          if (tag) tag.destroy();
+          obj.destroy();
+        }
         return true;
       });
     });
 
-    // Tide: SMOOTH, velocity-based rise (never snapped to the player's
-    // position). Speed = a constant base that slowly ramps over the run, plus
-    // an acceleration proportional to how far the tide has fallen below the
-    // bottom of the view. Measuring against the camera bottom (which moves
-    // smoothly, not per-bounce) means the water never "jumps" when you jump —
-    // it just rises faster to chase when you pull ahead, and rises into view
-    // when you slow or stop.
-    const elapsed = (this.time.now - this.runStartTime) / 1000;
-    const viewBottom = this.cameras.main.scrollY + this.scale.height;
-    const gapBelowScreen = (this.tideY - viewBottom) / S(1); // design px the tide sits below the visible bottom
-    // Time-based rise is CAPPED (+80 design px/s over the base) so a long, skilful
-    // climb never becomes unsurvivable by tide speed alone — past ~800 m the
-    // pressure comes from platform placement + hazards, not a runaway wall. The
-    // chase term still lets the tide surge to catch a player who stalls.
+    // Tide: CONSTANT base pace + a LEASH. The pace never ramps, but the water may
+    // never trail more than TIDE_LEASH_DESIGN below the visible bottom — if a
+    // strong climber pulls further ahead, a gentle capped catch-up reels it back
+    // up to the leash and then it resumes constant pace, so it's always a threat.
+    // Modifiers: the opening grace, and the Ocean-Law powerup.
     const inGrace = this.time.now < this.tideGraceUntil;
-    const baseRise = this.baseTideSpeed + Math.min(80, elapsed * TIDE_TIME_ACCEL);
-    // Opening grace: disable chase entirely. This is what stops a fast opening
-    // staircase / springs burst from triggering the "3× climb" rocket flood
-    // within the first 3 s; after grace, chase is gentle again (0.24).
-    const chase = inGrace
-      ? 0
-      : TIDE_CHASE_GAIN * Math.max(0, gapBelowScreen - TIDE_TARGET_BELOW_SCREEN);
-    this.tideSpeed = Math.min(TIDE_MAX_SPEED, baseRise + chase);
-
     const tideSlowActive = this.time.now < this.tideSlowUntil;
-    let effSpeed = tideSlowActive ? this.tideSpeed * 0.25 : this.tideSpeed;
-    // Opening grace: clamp the effective rise to a very slow crawl, so the
-    // player can afford to miss-tune the very first bounce without being
-    // pushed off the bottom by a rising wall.
+    // Leash in METRES against a SMOOTHED seal height (EMA) — a one-off spring apex
+    // doesn't yank the water up, but the sustained gap obeys the hard rule.
+    if (this.tideSealRefY === 0) this.tideSealRefY = this.player.y;
+    this.tideSealRefY = Phaser.Math.Linear(this.tideSealRefY, this.player.y, 0.08);
+    const PX_PER_M = S(20); // one metre in render px (matches the HUD gauge below)
+    const leashM = tuning.maxMetersBelow;
+    const leashGapM = (this.tideY - this.tideSealRefY) / PX_PER_M; // metres the tide sits below the seal
+    let effSpeed = tuning.tideSpeed * this.mapTideMult; // constant base pace
+    if (leashGapM > leashM) {
+      // Firm, rate-limited catch-up: the water's max speed (base + cap ≈ 11 m/s) is
+      // well above the seal's climb (~6 m/s), so the gap always converges back to
+      // the ≤15 m leash — smoothly, without ever teleporting up on a single bounce.
+      effSpeed += Math.min(TIDE_CATCHUP_MAX, (leashGapM - leashM) * TIDE_CATCHUP_GAIN_M);
+    }
+    if (tideSlowActive) effSpeed *= 0.25;
     if (inGrace) effSpeed = Math.min(effSpeed, TIDE_START_GRACE_MAX_SPEED);
+    this.tideSpeed = effSpeed;
     this.tideY -= S(effSpeed) * dt;
     this.drawTide();
 
 
-    const distToTide = this.tideY - this.player.y;
-    if (tideSlowActive) {
-      this.tideWarnText.setText('📜 Law slows the tide!').setColor('#9be7ff');
-    } else if (distToTide < S(260)) {
-      this.tideWarnText.setText('⚠️ TIDE RISING FAST!').setColor('#ef476f');
+    // Real-time tide gauge (top-right HUD): the live distance from the seal down
+    // to the water, colour-coded by danger so the player always knows how much
+    // runway is left. Big game-font readout, updated every frame.
+    const gapM = Math.max(0, Math.round((this.tideY - this.player.y) / S(20)));
+    if (gapM <= 5) {
+      this.tideWarnText.setText(`⚠️ TIDE ${gapM} m`).setColor('#ff5a5a');
+      this.tideWarnText.setScale(1 + 0.06 * Math.sin(this.time.now / 90)); // urgent pulse
     } else {
-      this.tideWarnText.setText('🌊 Tide below').setColor('#ffd166');
+      this.tideWarnText.setScale(1);
+      if (gapM <= 14) this.tideWarnText.setText(`🌊 ${gapM} m`).setColor('#ffd166');
+      else this.tideWarnText.setText(`🌊 ${gapM} m`).setColor('#8fe3ff');
     }
 
     if (this.jokerCooldownText) {
@@ -992,6 +1249,7 @@ export default class GameScene extends Phaser.Scene {
     // (no ad, no game-over screen), keeping your score & coins.
     if (getState().lives > 0 && spendLife()) {
       this.isGameOver = true; // guard re-entry while the scene restarts
+      crazyGameplayStop(); // paired with the gameplayStart in the restarted scene's create()
       playSfx('powerup');
       this.cameras.main.flash(220, 255, 120, 160);
       this.scene.start('GameScene', {
@@ -999,12 +1257,14 @@ export default class GameScene extends Phaser.Scene {
           meters: Math.floor(this.scoreMeters),
           coins: this.coinsCollected,
           bankedCoins: this.bankedCoins,
+          adRevived: this.adRevivedThisRun, // carry the ad-revive cap through heart revives
         },
       });
       return;
     }
 
     this.isGameOver = true;
+    crazyGameplayStop(); // CrazyGames: run ended (no-op off their portal)
     playSfx('gameover');
     this.cameras.main.shake(200, 0.015);
     this.physics.pause();
@@ -1022,6 +1282,9 @@ export default class GameScene extends Phaser.Scene {
         bankedCoins: this.coinsCollected,
         newBadges: result.newlyUnlockedBadges,
         newMaps: result.newlyUnlockedMaps,
+        adRevived: this.adRevivedThisRun, // hide the ad-revive offer if already used
+        trashCleaned: this.trashThisRun, // run highlight: ocean trash collected
+        boats: this.boatsThisRun, // run highlight: cleanup boats triggered
       });
     });
   }

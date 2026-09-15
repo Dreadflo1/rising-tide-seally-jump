@@ -3,13 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta property="og:image" content="/thumbnail.png" />
-  <meta property="og:title" content="Rising Tide: Seally Jump" />
-  <meta property="og:description" content="Jump, dodge and survive the rising tide! Bounce your monk seal up the coast, collect pearls, and climb the leaderboard." />
-  <meta name="description" content="An addictive vertical jumper: help a Hawaiian monk seal climb higher than the rising tide, collect pearls, unlock badges and maps, and use special jokers like dolphin pushes and ocean protection laws." />
+  <title>Rising Tide: Seally Jump — Free Ocean Jumper Game</title>
+  <meta name="description" content="Play Rising Tide: Seally Jump free in your browser — bounce a Hawaiian monk seal up the ocean, outrun the rising tide, collect pearls, unlock skins and worlds, and climb the global leaderboard. 20% of revenue supports The Ocean Cleanup." />
+  <link rel="canonical" href="https://seally.best/" />
+  <meta name="robots" content="index, follow" />
   <meta name="author" content="Greenback LLC" />
+
+  <!-- Open Graph (link previews on Discord, Facebook, iMessage, etc.) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Rising Tide: Seally Jump" />
+  <meta property="og:url" content="https://seally.best/" />
+  <meta property="og:title" content="Rising Tide: Seally Jump — Free Ocean Jumper" />
+  <meta property="og:description" content="Bounce a monk seal up the ocean and outrun the rising tide. Free to play in any browser — 20% funds The Ocean Cleanup." />
+  <meta property="og:image" content="https://seally.best/og-cover.jpg" />
+  <meta property="og:image:width" content="1920" />
+  <meta property="og:image:height" content="1080" />
+  <meta property="og:image:alt" content="Rising Tide: Seally Jump — a monk seal leaping over an ocean reef" />
+
+  <!-- Twitter / X card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Rising Tide: Seally Jump — Free Ocean Jumper" />
+  <meta name="twitter:description" content="Outrun the rising tide as a monk seal. Free browser game — 20% funds The Ocean Cleanup." />
+  <meta name="twitter:image" content="https://seally.best/og-cover.jpg" />
+
+  <!-- AdSense site-ownership verification (harmless everywhere; the actual ad
+       script is loaded only on our own domain by src/webAds.ts). -->
+  <meta name="google-adsense-account" content="ca-pub-6872808751357725" />
   <meta name="copyright" content="© Greenback LLC — &quot;Seally the Seal Jump Jumper&quot;. All rights reserved." />
-  <title>Rising Tide: Seally Jump</title>
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#023E8A" />
@@ -17,6 +37,41 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Seally Jump" />
   <link rel="apple-touch-icon" href="icon-192.png" />
+  <!-- Structured data: lets search engines treat this as a game (rich results). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Rising Tide: Seally Jump",
+    "url": "https://seally.best/",
+    "image": "https://seally.best/og-cover.jpg",
+    "description": "A free browser jumper: bounce a Hawaiian monk seal up the ocean, outrun the rising tide, collect pearls, unlock skins and worlds, and climb the global leaderboard. 20% of revenue supports The Ocean Cleanup.",
+    "genre": ["Arcade", "Casual", "Platformer"],
+    "gamePlatform": ["Web browser", "PWA"],
+    "operatingSystem": "Any (HTML5 browser)",
+    "applicationCategory": "Game",
+    "playMode": "SinglePlayer",
+    "inLanguage": "en",
+    "author": { "@type": "Organization", "name": "Greenback LLC" },
+    "publisher": { "@type": "Organization", "name": "Greenback LLC" },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" }
+  }
+  </script>
+  <!-- FAQ structured data (matches the visible FAQ section). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is Rising Tide: Seally Jump free to play?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — it's completely free and plays right in your browser on desktop or mobile. No download and no sign-up required; ads keep it free." } },
+      { "@type": "Question", "name": "How do I play?", "acceptedAnswer": { "@type": "Answer", "text": "Steer left and right — Seally bounces up automatically. Grab pearls, dodge the ocean hazards, and stay ahead of the rising tide. On desktop use the Left/Right arrow keys; on mobile tap the left or right side of the screen." } },
+      { "@type": "Question", "name": "Do I need to install anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. It runs instantly in any modern browser. You can also add it to your home screen as an app (PWA) to play offline and launch it like a native game." } },
+      { "@type": "Question", "name": "How does playing help the ocean?", "acceptedAnswer": { "@type": "Answer", "text": "20% of the game's revenue is donated to The Ocean Cleanup, which removes plastic from oceans and rivers. Just playing for free already helps." } },
+      { "@type": "Question", "name": "Can I keep my pearls, skins and high score?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — your progress saves automatically. Create a free account with Google or email to sync it across devices and claim your spot on the global leaderboard." } },
+      { "@type": "Question", "name": "Where else can I play it?", "acceptedAnswer": { "@type": "Answer", "text": "You can also find Seally Jump on game portals such as itch.io and GameDistribution. seally.best is its official home." } }
+    ]
+  }
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
   <style>
     /* ================= Landing page (top-level website only) =================
@@ -45,6 +100,20 @@
     #landing p.sub { font-size:clamp(14px,3.4vw,17px); opacity:.85; margin:0 0 30px; }
     #landing section { padding:56px 0; }
     #landing section + section { border-top:1px solid rgba(255,255,255,.07); }
+
+    /* ---- FAQ (accessible native accordion) ---- */
+    #landing .faq { max-width:720px; margin:0 auto; text-align:left; }
+    #landing .faq details { background:var(--panel); border:1px solid var(--stroke); border-radius:14px;
+      margin-bottom:10px; padding:0 18px; overflow:hidden; }
+    #landing .faq summary { list-style:none; cursor:pointer; padding:16px 30px 16px 0; position:relative;
+      font-family:'Baloo 2',sans-serif; font-weight:700; font-size:clamp(15px,3.6vw,18px); color:#fff; }
+    #landing .faq summary::-webkit-details-marker { display:none; }
+    #landing .faq summary::after { content:'+'; position:absolute; right:2px; top:50%; transform:translateY(-50%);
+      font-size:24px; color:var(--gold); line-height:1; transition:transform .2s ease; }
+    #landing .faq details[open] summary::after { content:'–'; }
+    #landing .faq details[open] summary { color:var(--gold); }
+    #landing .faq .ans { padding:0 0 16px; font-size:clamp(14px,3.4vw,16px); opacity:.9; line-height:1.6; }
+    #landing .faq .ans a { color:var(--mint); font-weight:700; }
 
     /* ---- Header ---- */
     #landing .hdr { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
@@ -75,7 +144,8 @@
     #landing .hero-seal { width:clamp(120px,26vw,180px); aspect-ratio:1; margin-bottom:6px;
       filter:drop-shadow(0 14px 22px rgba(0,0,0,.45)); animation:bob 2.6s ease-in-out infinite; }
     @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
-    #landing .logo1,#landing .logo2 { font-family:'Baloo 2',sans-serif; font-weight:700; line-height:1; letter-spacing:1px;
+    #landing .hero-h1 { margin:0; }
+    #landing .logo1,#landing .logo2 { display:block; font-family:'Baloo 2',sans-serif; font-weight:700; line-height:1; letter-spacing:1px;
       text-transform:uppercase; text-shadow:0 4px 0 rgba(2,62,138,.8),0 1px 1px rgba(255,255,255,.35); }
     #landing .logo1 { font-size:clamp(38px,10vw,74px); }
     #landing .logo2 { font-size:clamp(28px,7.5vw,56px); color:var(--gold); margin-top:2px; }
@@ -85,9 +155,9 @@
     #landing .scroll-hint { margin-top:26px; font-size:22px; opacity:.7; animation:bob 2s ease-in-out infinite; }
 
     /* nickname save card */
-    #landing .save-card { background:#fff; color:var(--deep); border-radius:20px; padding:16px 16px 18px; max-width:420px;
-      margin:22px auto 0; box-shadow:0 16px 34px rgba(0,0,0,.34); text-align:left; }
-    #landing .save-card label { font-weight:800; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#5b7a95; }
+    #landing .save-card { background:#fff; color:var(--deep); border-radius:20px; padding:16px 16px 18px; width:100%; max-width:420px;
+      box-sizing:border-box; margin:22px auto 0; box-shadow:0 16px 34px rgba(0,0,0,.34); text-align:left; }
+    #landing .save-card label { font-weight:800; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#4d6880; }
     #landing .save-row { display:flex; gap:8px; margin-top:8px; }
     #landing .save-row input { flex:1; min-width:0; padding:12px 14px; border-radius:13px; border:2px solid #dfe8ef;
       background:#f4f8fb; font-family:'Nunito',sans-serif; font-weight:700; font-size:16px; color:var(--deep); }
@@ -102,8 +172,8 @@
     #landing .stage .nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%;
       border:1px solid var(--stroke); background:rgba(2,20,44,.6); color:#fff; font-size:26px; line-height:1; cursor:pointer; backdrop-filter:blur(4px); }
     #landing .stage .prev { left:-14px; } #landing .stage .next { right:-14px; }
-    #landing .thumbs { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-    #landing .thumbs img { width:64px; height:64px; object-fit:cover; border-radius:12px; cursor:pointer;
+    #landing .thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:340px; margin:0 auto; }
+    #landing .thumbs img { width:100%; height:auto; aspect-ratio:1; object-fit:cover; border-radius:12px; cursor:pointer;
       border:2px solid transparent; opacity:.62; transition:opacity .15s, transform .15s, border-color .15s; }
     #landing .thumbs img:hover { opacity:1; transform:translateY(-2px); }
     #landing .thumbs img.active { opacity:1; border-color:var(--mint); box-shadow:0 0 0 2px rgba(0,245,212,.35); }
@@ -125,10 +195,10 @@
     #landing .ctrl-note { margin-top:16px; font-size:14px; opacity:.85; }
 
     /* ---- Ambiance masonry ---- */
-    #landing .ambiance { columns:2; column-gap:12px; max-width:800px; margin:0 auto; }
-    #landing .ambiance img { width:100%; margin:0 0 12px; display:block; border-radius:14px;
-      border:1px solid rgba(255,255,255,.15); box-shadow:0 8px 20px rgba(0,0,0,.42); break-inside:avoid; }
-    @media (min-width:760px){ #landing .ambiance { columns:3; } }
+    #landing .ambiance { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; max-width:800px; margin:0 auto; }
+    #landing .ambiance img { width:100%; height:100%; aspect-ratio:4/3; object-fit:cover; display:block; border-radius:14px;
+      border:1px solid rgba(255,255,255,.15); box-shadow:0 8px 20px rgba(0,0,0,.42); }
+    @media (min-width:760px){ #landing .ambiance { grid-template-columns:repeat(3,1fr); } }
 
     /* ---- Skins ---- */
     #landing .skins { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; max-width:820px; margin:0 auto; }
@@ -160,20 +230,22 @@
     #landing .final { text-align:center; }
     #landing .foot { padding:26px 20px 40px; text-align:center; font-size:12px; color:#cfe6f2; }
     #landing .socials { display:flex; gap:12px; justify-content:center; margin-bottom:14px; }
-    #landing .socials a { width:44px; height:44px; display:grid; place-items:center; border-radius:50%; font-size:20px;
-      background:rgba(255,255,255,.16); border:1px solid var(--stroke); }
+    #landing .socials a { width:44px; height:44px; display:grid; place-items:center; border-radius:50%;
+      background:#fff; border:1px solid rgba(255,255,255,.5); box-shadow:0 3px 10px rgba(0,0,0,.2); transition:transform .12s ease; }
+    #landing .socials a:hover { transform:translateY(-2px) scale(1.06); }
+    #landing .socials a img { width:24px; height:24px; display:block; }
     #landing .foot .legal a { color:#fff; }
     /* ---- Cloud account modal ---- */
     #landing .auth-modal { position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
       background:rgba(2,20,44,.72); padding:20px; }
     #landing .auth-card { background:#fff; color:var(--deep); width:100%; max-width:380px; border-radius:22px;
       padding:24px 22px; box-shadow:0 20px 50px rgba(0,0,0,.45); position:relative; text-align:center; }
-    #landing .auth-close { position:absolute; top:10px; right:14px; background:none; border:none; font-size:20px; color:#5b7a95; cursor:pointer; }
+    #landing .auth-close { position:absolute; top:10px; right:14px; background:none; border:none; font-size:20px; color:#4d6880; cursor:pointer; }
     #landing .auth-card h3 { font-family:'Baloo 2',sans-serif; font-size:24px; margin:2px 0 4px; }
-    #landing .auth-sub { font-size:13px; color:#5b7a95; margin-bottom:16px; }
+    #landing .auth-sub { font-size:13px; color:#4d6880; margin-bottom:16px; }
     #landing .auth-google-host { display:flex; justify-content:center; min-height:44px; margin-bottom:10px; }
-    #landing .auth-google-note { font-size:12px; color:#5b7a95; min-height:18px; margin-bottom:10px; }
-    #landing .auth-divider { display:flex; align-items:center; gap:10px; margin:8px 0 14px; color:#7a93a8; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+    #landing .auth-google-note { font-size:12px; color:#4d6880; min-height:18px; margin-bottom:10px; }
+    #landing .auth-divider { display:flex; align-items:center; gap:10px; margin:8px 0 14px; color:#4d6880; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
     #landing .auth-divider::before, #landing .auth-divider::after { content:''; flex:1; height:1px; background:#dfe8ef; }
     #landing .auth-card input { width:100%; padding:13px 14px; margin-bottom:10px; border-radius:13px; border:2px solid #dfe8ef;
       background:#f4f8fb; font-family:'Nunito',sans-serif; font-weight:700; font-size:16px; color:var(--deep); }
@@ -181,12 +253,12 @@
     #landing .auth-card input.hidden { display:none; }
     #landing .auth-err { color:#d1495b; font-size:13px; min-height:18px; margin-bottom:6px; font-weight:700; }
     #landing .auth-primary { width:100%; }
-    #landing .auth-switch { margin-top:14px; font-size:13px; color:#5b7a95; }
+    #landing .auth-switch { margin-top:14px; font-size:13px; color:#4d6880; }
     #landing .auth-switch a { color:var(--ocean); font-weight:800; }
-    #landing .auth-hint { margin-top:10px; font-size:12px; color:#5b7a95; }
+    #landing .auth-hint { margin-top:10px; font-size:12px; color:#4d6880; }
     #landing .account-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:18px 0 14px; text-align:left; }
     #landing .account-stat { background:#f4f8fb; border:1px solid #e3edf4; border-radius:14px; padding:12px 14px; }
-    #landing .account-stat .k { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#7a93a8; font-weight:800; margin-bottom:4px; }
+    #landing .account-stat .k { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#4d6880; font-weight:800; margin-bottom:4px; }
     #landing .account-stat .v { font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; color:var(--deep); word-break:break-word; }
     #landing .account-stat.wide { grid-column:1 / -1; }
     #landing .account-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
@@ -201,7 +273,7 @@
     #landing .account-detail h4 { margin:0 0 8px; font-family:'Baloo 2',sans-serif; font-size:15px; color:var(--deep); }
     #landing .account-detail .progress { height:10px; background:#e3edf4; border-radius:999px; overflow:hidden; margin:6px 0 4px; }
     #landing .account-detail .progress > i { display:block; height:100%; background:linear-gradient(90deg, var(--sky), var(--mint)); border-radius:999px; }
-    #landing .account-detail .note { font-size:12px; color:#5b7a95; margin:2px 0 0; }
+    #landing .account-detail .note { font-size:12px; color:#4d6880; margin:2px 0 0; }
     #landing .badge-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
     #landing .badge-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
       border:1px solid #e3edf4; background:#fff; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:12px; color:var(--deep); }
@@ -249,10 +321,9 @@
 
     <!-- 1. HERO -->
     <section class="hero">
-      <img class="hero-seal" src="sprites/player_seal.png" alt="Seally the Hawaiian monk seal" />
-      <div class="logo1">Rising Tide</div>
-      <div class="logo2">Seally Jump</div>
-      <p class="tagline">Jump, dodge, and survive the rising tide!</p>
+      <img class="hero-seal" src="sprites/player_seal.png" alt="Seally the Hawaiian monk seal jumping" />
+      <h1 class="hero-h1"><span class="logo1">Rising Tide</span><span class="logo2">Seally Jump</span></h1>
+      <p class="tagline">A free ocean jumper — outrun the rising tide, and 20% funds The Ocean Cleanup.</p>
       <div class="cta">
         <button id="play-btn" class="btn btn-play btn-lg">▶ Play Now</button>
         <button id="install-btn" class="btn btn-ghost btn-lg">📲 Get on Mobile</button>
@@ -276,15 +347,16 @@
         <p class="sub">Tap a thumbnail to explore the gameplay.</p>
         <div class="stage">
           <button class="nav prev" id="mg-prev" aria-label="Previous">‹</button>
-          <img class="main" id="mg-main" src="screens/shot1.jpg" alt="Rising Tide gameplay" />
+          <img class="main" id="mg-main" src="screens/screen-jump.jpg" alt="Rising Tide gameplay" />
           <button class="nav next" id="mg-next" aria-label="Next">›</button>
         </div>
         <div class="thumbs" id="mg-thumbs">
-          <img data-src="screens/shot1.jpg" src="screens/shot1.jpg" class="active" alt="Lagoon" onerror="this.style.display='none'" />
-          <img data-src="screens/shot2.jpg" src="screens/shot2.jpg" alt="Reef" onerror="this.style.display='none'" />
-          <img data-src="screens/shot3.jpg" src="screens/shot3.jpg" alt="Storm" onerror="this.style.display='none'" />
-          <img data-src="mockups/mockup-1.jpg" src="mockups/mockup-1.jpg" alt="On mobile" onerror="this.style.display='none'" />
-          <img data-src="mockups/mockup-2.jpg" src="mockups/mockup-2.jpg" alt="On mobile" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-jump.jpg" src="screens/screen-jump.jpg" class="active" alt="Seally jumping over the reef" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-reef.jpg" src="screens/screen-reef.jpg" alt="Diving past a sea turtle" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-climb.jpg" src="screens/screen-climb.jpg" alt="Climbing above the waterline" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-maps.jpg" src="screens/screen-maps.jpg" alt="Three ocean worlds" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-skins.jpg" src="screens/screen-skins.jpg" alt="Unlockable Seally skins" onerror="this.style.display='none'" />
+          <img data-src="screens/screen-leaderboard.jpg" src="screens/screen-leaderboard.jpg" alt="Global leaderboard" onerror="this.style.display='none'" />
         </div>
       </div>
     </section>
@@ -378,6 +450,40 @@
       </div>
     </section>
 
+    <!-- 7b. FAQ (SEO — matched by FAQPage JSON-LD below) -->
+    <section>
+      <div class="wrap">
+        <h2 class="sec">Frequently asked questions</h2>
+        <p class="sub">Everything you need before your first jump.</p>
+        <div class="faq">
+          <details open>
+            <summary>Is Rising Tide: Seally Jump free to play?</summary>
+            <div class="ans">Yes — it's completely free and plays right in your browser on desktop or mobile. No download and no sign-up required; ads keep it free.</div>
+          </details>
+          <details>
+            <summary>How do I play?</summary>
+            <div class="ans">Steer left and right — Seally bounces up automatically. Grab pearls, dodge the ocean hazards, and stay ahead of the rising tide. On desktop use the Left/Right arrow keys; on mobile tap the left or right side of the screen.</div>
+          </details>
+          <details>
+            <summary>Do I need to install anything?</summary>
+            <div class="ans">No. It runs instantly in any modern browser. You can also add it to your home screen as an app (PWA) to play offline and launch it like a native game.</div>
+          </details>
+          <details>
+            <summary>How does playing help the ocean?</summary>
+            <div class="ans">20% of the game's revenue is donated to <a href="https://theoceancleanup.com" target="_blank" rel="noopener">The Ocean Cleanup</a>, which removes plastic from oceans and rivers. Just playing for free already helps.</div>
+          </details>
+          <details>
+            <summary>Can I keep my pearls, skins and high score?</summary>
+            <div class="ans">Yes — your progress saves automatically. Create a free account with Google or email to sync it across devices and claim your spot on the global leaderboard.</div>
+          </details>
+          <details>
+            <summary>Where else can I play it?</summary>
+            <div class="ans">You can also find Seally Jump on game portals such as itch.io and GameDistribution. <strong>seally.best</strong> is its official home.</div>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <!-- 8. FINAL CTA -->
     <section class="final">
       <div class="wrap">
@@ -390,9 +496,11 @@
     <!-- FOOTER -->
     <div class="foot">
       <div class="socials">
-        <a class="soc" data-soc="TikTok" href="#" aria-label="TikTok">🎵</a>
-        <a class="soc" data-soc="Instagram" href="#" aria-label="Instagram">📸</a>
-        <a class="soc" data-soc="Discord" href="#" aria-label="Discord">💬</a>
+        <a class="soc" data-soc="TikTok" href="#" aria-label="TikTok"><img src="social/tiktok.png" alt="TikTok"></a>
+        <a class="soc" data-soc="Instagram" href="#" aria-label="Instagram"><img src="social/instagram.png" alt="Instagram"></a>
+        <a class="soc" data-soc="Facebook" href="#" aria-label="Facebook"><img src="social/facebook.png" alt="Facebook"></a>
+        <a class="soc" data-soc="X" href="#" aria-label="X"><img src="social/x.png" alt="X"></a>
+        <a class="soc" data-soc="WhatsApp" href="#" aria-label="WhatsApp"><img src="social/whatsapp.png" alt="WhatsApp"></a>
       </div>
       <div class="legal">
         &ldquo;Seally the Seal Jump Jumper&rdquo; &copy; Greenback LLC &nbsp;·&nbsp;

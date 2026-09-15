@@ -20,8 +20,17 @@ export interface ShareResult {
   ok: boolean;
 }
 
-export function buildShareText(meters: number, username: string): string {
-  return `🦭 I climbed ${meters}m up the coast dodging the Rising Tide in "Rising Tide: Seal Jump"! Can you beat ${username}'s score? 🌊 20% of revenue supports The Ocean Cleanup 💙`;
+// Always funnel shares to our own canonical site — never the current host. A run
+// shared from a portal iframe (itch's CDN domain, GameDistribution, …) should
+// still send friends to seally.best: the page we own, that's SEO'd, and that
+// links out everywhere. GameOverScene passes this instead of location.href.
+export const SHARE_URL = 'https://seally.best';
+
+// First-person challenge (the sharer IS the player, so "beat me" reads right),
+// with the correct game name and the charity hook. `username` is accepted for
+// call-site compatibility but the copy stays personal, not third-person.
+export function buildShareText(meters: number, _username?: string): string {
+  return `🦭 I just climbed ${meters}m in Rising Tide: Seally Jump! Can you beat me and outrun the rising tide? 🌊 Free to play — and 20% supports The Ocean Cleanup 💙`;
 }
 
 export function hasNativeShare(): boolean {
@@ -59,7 +68,7 @@ export async function shareTo(
     case 'native': {
       if (hasNativeShare()) {
         try {
-          await navigator.share({ title: 'Rising Tide: Seal Jump', text, url });
+          await navigator.share({ title: 'Rising Tide: Seally Jump', text, url });
           return { platform, note: 'Shared! Thanks 💚', ok: true };
         } catch {
           return { platform, note: '', ok: false }; // user cancelled

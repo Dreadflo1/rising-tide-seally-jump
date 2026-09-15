@@ -13,9 +13,16 @@
 export const BASE_WIDTH = 480;
 export const BASE_HEIGHT = 854;
 
-export const SCALE = 2.25; // supersampling factor
-export const WIDTH = Math.round(BASE_WIDTH * SCALE); // 1080
-export const HEIGHT = Math.round(BASE_HEIGHT * SCALE); // 1922
+// Supersampling factor. Bumped 2.25 → 2.5 so the internal buffer is 1200 px wide,
+// which now covers a modern high-DPR phone's physical width (iPhone 16 ≈ 1179 px)
+// instead of being upscaled from 1080 — that removes the last bit of retina
+// softness. Everything (velocities, gaps, fonts) is expressed via S()=×SCALE, so
+// raising SCALE scales the whole world uniformly: the game FEELS identical, only
+// sharper. Cost is ~+23% fragments/frame; if a low-end device ever janks, dialling
+// this back toward 2.25 is the single lever (no gameplay retuning needed).
+export const SCALE = 2.5; // supersampling factor
+export const WIDTH = Math.round(BASE_WIDTH * SCALE); // 1200
+export const HEIGHT = Math.round(BASE_HEIGHT * SCALE); // 2135
 
 /** Convert a "design pixel" (tuned against the 480x854 baseline) to a real render pixel. */
 export function S(designPixels: number): number {

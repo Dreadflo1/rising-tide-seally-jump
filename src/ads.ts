@@ -12,6 +12,18 @@ import Phaser from 'phaser';
 import { getState } from './state';
 import { S } from './constants';
 import { runInterstitial, InterstitialController } from './interstitialController';
+import { webAdsActive, webRewardedReady, showWebRewarded, showWebInterstitial } from './webAds';
+import { crazyActive, crazyRewardedReady, showCrazyRewarded, showCrazyInterstitial } from './crazyAds';
+
+// Pause/resume a Phaser scene around a web (AdSense H5) ad overlay.
+function pauseSceneForAd(scene: Phaser.Scene) {
+  scene.sound.mute = true;
+  if (scene.scene.isActive()) scene.scene.pause();
+}
+function resumeSceneAfterAd(scene: Phaser.Scene) {
+  if (scene.scene.isPaused()) scene.scene.resume();
+  scene.sound.mute = getState().muted;
+}
 
 declare global {
   interface Window {
@@ -91,7 +103,7 @@ function preloadRewarded() {
 
 /** Synchronous check for the UI: is a rewarded ad ready to show right now? */
 export function isRewardedReady(): boolean {
-  return rewardedReady;
+  return rewardedReady || crazyRewardedReady() || webRewardedReady();
 }
 
 function resumeActiveScene() {
@@ -212,8 +224,25 @@ export function showInterstitial(scene: Phaser.Scene, onDone: () => void) {
     return;
   }
   if (!canUseRealAds()) {
-    // No real ad source (local dev / placeholder id) — let the player continue
-    // for free rather than showing a fake ad.
+    // No GameDistribution source. On the CrazyGames portal, let their SDK serve
+    // the interstitial; on our own site, try the web ad provider (AdSense H5);
+    // otherwise continue for FREE.
+    if (crazyActive()) {
+      pauseSceneForAd(scene);
+      showCrazyInterstitial(() => {
+        resumeSceneAfterAd(scene);
+        onDone();
+      });
+      return;
+    }
+    if (webAdsActive()) {
+      pauseSceneForAd(scene);
+      showWebInterstitial(() => {
+        resumeSceneAfterAd(scene);
+        onDone();
+      });
+      return;
+    }
     adDbg('SDK not loaded -> free replay');
     onDone();
     return;
@@ -263,6 +292,36 @@ export function showInterstitial(scene: Phaser.Scene, onDone: () => void) {
  * before showing, per their SDK. */
 export function showRewardedAd(scene: Phaser.Scene, onReward: () => void, onUnavailable: () => void) {
   if (!canUseRealAds() || !rewardedReady) {
+    // No GD rewarded ad. On the CrazyGames portal, use their rewarded ad first.
+    if (crazyActive()) {
+      pauseSceneForAd(scene);
+      showCrazyRewarded(
+        () => {
+          resumeSceneAfterAd(scene);
+          onReward();
+        },
+        () => {
+          resumeSceneAfterAd(scene);
+          onUnavailable();
+        }
+      );
+      return;
+    }
+    // On our own site, try the web provider (AdSense H5).
+    if (webAdsActive()) {
+      pauseSceneForAd(scene);
+      showWebRewarded(
+        () => {
+          resumeSceneAfterAd(scene);
+          onReward();
+        },
+        () => {
+          resumeSceneAfterAd(scene);
+          onUnavailable();
+        }
+      );
+      return;
+    }
     adDbg('rewarded: none ready -> unavailable');
     onUnavailable();
     return;

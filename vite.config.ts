@@ -10,7 +10,7 @@ function flattenPortalAssets() {
       const rootDir = process.cwd()
       const publicDir = path.join(rootDir, 'public')
       const distDir = path.join(rootDir, 'dist')
-      for (const folder of ['backgrounds', 'sfx', 'sprites']) {
+      for (const folder of ['backgrounds', 'sfx', 'sprites', 'social']) {
         const sourceDir = path.join(publicDir, folder)
         const entries = await readdir(sourceDir, { withFileTypes: true })
         for (const entry of entries) {

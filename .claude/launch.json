@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "seal-jump-dev",
-      "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "dev", "--port", "5173"],
+      "name": "seally-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5173
     }
   ]

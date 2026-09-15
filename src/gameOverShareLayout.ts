@@ -1,8 +1,9 @@
 import { SharePlatform, hasNativeShare } from './share';
 
 export interface ShareButtonDef {
-  emoji: string;
+  emoji: string; // fallback glyph (used for 'native', which has no brand icon)
   p: SharePlatform;
+  icon?: string; // texture key for a real brand icon, when one exists
 }
 
 export interface GameOverShareLayoutInput {
@@ -33,11 +34,11 @@ export function buildShareButtons(includeNative = hasNativeShare()): ShareButton
   const buttons: ShareButtonDef[] = [];
   if (includeNative) buttons.push({ emoji: '📤', p: 'native' });
   buttons.push(
-    { emoji: '🐦', p: 'twitter' },
-    { emoji: '👥', p: 'facebook' },
-    { emoji: '💬', p: 'whatsapp' },
-    { emoji: '📸', p: 'instagram' },
-    { emoji: '🎶', p: 'tiktok' }
+    { emoji: '🐦', p: 'twitter', icon: 'soc_x' },
+    { emoji: '👥', p: 'facebook', icon: 'soc_facebook' },
+    { emoji: '💬', p: 'whatsapp', icon: 'soc_whatsapp' },
+    { emoji: '📸', p: 'instagram', icon: 'soc_instagram' },
+    { emoji: '🎶', p: 'tiktok', icon: 'soc_tiktok' }
   );
   return buttons;
 }

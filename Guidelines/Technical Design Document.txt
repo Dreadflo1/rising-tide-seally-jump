@@ -1,0 +1,198 @@
+
+# Technical Design Document  
+## Procedural Generation, Physics & Psychological Pacing  
+**Game**: Protective Mammal Endless Jumper (Rising Tide)
+
+---
+
+### 1. Core Physics Constants & Formulas
+
+```text
+// === BASE PHYSICS ===
+GRAVITY                 = 28.0          // units/s² (tunable)
+JUMP_FORCE              = 14.5          // initial upward velocity
+MAX_FALL_SPEED          = 22.0
+
+// Calculated jump height (theoretical max on flat ground)
+H = (JUMP_FORCE * JUMP_FORCE) / (2 * GRAVITY)     // ≈ 3.76 units
+
+// Practical usable jump height (after tuning feel)
+H_USABLE = H * 0.92                               // safety margin
+```
+
+**Distance rules (vertical):**
+
+```text
+MIN_GAP          = H_USABLE * 0.55
+MAX_GAP_EARLY    = H_USABLE * 0.85      // first 25 jumps
+MAX_GAP_MID      = H_USABLE * 1.05
+MAX_GAP_LATE     = H_USABLE * 1.18
+
+// Horizontal reach
+MAX_HORIZONTAL_REACH = ScreenWidth * 0.48
+```
+
+**Tide rise speed (linked to height):**
+
+```text
+TIDE_BASE_SPEED     = 0.35 units/s
+TIDE_ACCEL          = 0.00012           // per unit of height
+
+CurrentTideSpeed = TIDE_BASE_SPEED + (CurrentHeight * TIDE_ACCEL)
+```
+
+---
+
+### 2. Psychological & Pacing Model (Jump-based)
+
+Le fun et la dopamine sont pilotés par le **nombre de sauts réussis** dans le run actuel (`JumpCount`).
+
+| JumpCount Range | Phase Name       | Target Feeling          | Gap Multiplier | Difficulty Budget |
+|-----------------|------------------|-------------------------|----------------|-------------------|
+| 1 – 8           | Onboarding       | Competence + safety     | 0.70 – 0.85    | 0.15 |
+| 9 – 22          | Flow Peak        | Pure fun + rhythm       | 0.58 – 0.78    | 0.30 |
+| 23 – 40         | Rising Tension   | Near-miss pleasure      | 0.50 – 0.75    | 0.50 |
+| 41 – 70         | Challenge        | Skill expression        | 0.45 – 0.80    | 0.70 |
+| 71+             | Mastery          | Ego + record chasing    | 0.40 – 0.85    | 0.90 |
+
+**Ego Bias & Near-miss injection:**
+- After every death, display: `DistanceToPersonalBest = PersonalBestHeight - DeathHeight`
+- Force a near-miss opportunity every 6–9 jumps after JumpCount > 15 (crumbling rock just after a moving one, or tide rising under the player).
+
+---
+
+### 3. Rock Generation Algorithm (Pseudo-code)
+
+```text
+function GenerateNextRock(currentHeight, jumpCount, lastRocks[]):
+
+    // 1. Determine difficulty budget
+    budget = GetDifficultyBudget(jumpCount)          // from table above (0.15 → 0.90)
+
+    // 2. Choose rock type with weighted probabilities + constraints
+    type = ChooseRockType(budget, lastRocks)
+
+    // 3. Calculate vertical gap
+    gap = Lerp(MIN_GAP, GetMaxGapForPhase(jumpCount), Random(0.3, 1.0))
+    
+    // 4. Safety check: never create an impossible jump
+    if gap > H_USABLE * 1.05 and type != "Bouncy":
+        type = "Stable" or "Bouncy"
+        gap = H_USABLE * Random(0.65, 0.85)
+
+    // 5. Horizontal position
+    x = lastRock.x + Random(-MAX_HORIZONTAL_REACH, MAX_HORIZONTAL_REACH)
+    x = Clamp(x, ScreenLeft + margin, ScreenRight - margin)
+
+    // 6. Apply special rules
+    if type == "Moving":
+        moveSpeed = Lerp(0.8, 2.1, budget)
+        moveRange = ScreenWidth * Random(0.25, 0.45)
+
+    if type == "Crumbling":
+        lifeTime = Random(0.55, 0.85)   // seconds after landing
+
+    return new Rock(type, position, properties)
+```
+
+**Rock Type Probability Tables (scale with budget 0→1)**
+
+```text
+Stable:     0.75 → 0.22
+Crumbling:  0.12 → 0.26
+Moving:     0.07 → 0.22
+Bouncy:     0.05 → 0.16
+Slippery:   0.01 → 0.14   // unlocked only after height > 1200
+```
+
+**Hard constraints (never break):**
+- Maximum 2 non-stable rocks in a row
+- After any gap > 0.95 × H_USABLE → next rock must be Stable or Bouncy
+- At least 1 Stable rock every 5 rocks
+
+---
+
+### 4. Item & Power-up Spawn System
+
+**Categories:**
+
+```text
+Minor (score only):     Fish, Kelp
+Medium:                 Upward Current, Bubble Shield, Golden Fish
+Major:                  Water Jet, Seagull Lift, Parental Shield
+```
+
+**Spawn Formula:**
+
+```text
+function ShouldSpawnItem(jumpCount, height, lastItemType, lastMajorJump):
+
+    mediumInterval = Lerp(16, 8, difficultyBudget)
+    majorInterval  = Lerp(45, 19, difficultyBudget)
+
+    if (jumpCount - lastItemJump) >= mediumInterval * Random(0.75, 1.25):
+        if Random() < 0.70:
+            return MediumItem (weighted)
+        else:
+            return MinorItem
+
+    if (jumpCount - lastMajorJump) >= majorInterval and Random() < 0.38:
+        return MajorItem
+
+    return null
+```
+
+**Variety Rules (mandatory):**
+- Never the same Medium or Major item twice in a row
+- After a Major item → force at least 9 jumps without another Major
+- 30% of Medium spawns must be pure score (Golden Fish) — no movement advantage
+- Prefer spawning Major items 2–4 jumps before a higher-difficulty segment
+
+---
+
+### 5. Complete Generation Loop (High-level)
+
+```text
+On each new rock needed:
+
+1. jumpCount += 1
+2. currentHeight = camera.y
+3. budget = GetDifficultyBudget(jumpCount)
+4. rock = GenerateNextRock(...)
+5. item = ShouldSpawnItem(...)
+6. if item: AttachToRockOrNearby(rock, item)
+7. ApplyNearMissLogic(rock, jumpCount)      // force interesting situations
+8. UpdateTideSpeed(currentHeight)
+```
+
+---
+
+### 6. Tunable Parameters (for balancing)
+
+```text
+// Easy to expose in a debug panel
+ONBOARDING_JUMPS          = 8
+FLOW_PEAK_END             = 22
+NEAR_MISS_FREQUENCY       = 7          // every N jumps after jump 15
+MAJOR_POWERUP_COOLDOWN    = 9
+TIDE_THREAT_MULTIPLIER    = 1.0        // global difficulty
+H_USABLE_MULTIPLIER       = 0.92
+```
+
+---
+
+### 7. LLM / Developer Usage Notes
+
+- Toutes les valeurs sont nommées et centralisées → facile à balancer.
+- L’algorithme est déterministe dans ses contraintes (jamais d’impasse) mais stochastique dans ses variations.
+- Le système est piloté par `JumpCount` (plus stable que la hauteur pure pour le feeling).
+- Ego bias et near-miss sont explicitement injectés.
+
+---
+
+Tu as maintenant un document prêt pour un développeur ou pour être collé dans un prompt LLM (« Implémente le système de génération procédurale suivant : » + ce texte).
+
+Veux-tu que je rajoute ensuite :
+- Les valeurs exactes de particules / sons recommandés,
+- Le système de score détaillé,
+- Ou la version Unity / Godot-oriented (avec noms de variables C# ou GDScript) ?

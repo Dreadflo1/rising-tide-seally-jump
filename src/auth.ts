@@ -1,7 +1,10 @@
-// Lightweight "account" system backed by localStorage.
+// Lightweight "account" system backed by the `store` shim (localStorage, or the
+// CrazyGames Data Module inside their portal iframe — see storage.ts).
 // No real backend (static deploy) — but this behaves like a genuine login:
 // a username creates/resumes a persistent profile, and the session survives
 // page reloads until the player explicitly switches/logs out.
+
+import { store } from './storage';
 
 export interface Session {
   username: string;
@@ -31,7 +34,7 @@ export function guestName(): string {
 
 export function listProfiles(): string[] {
   try {
-    const raw = localStorage.getItem(PROFILES_KEY);
+    const raw = store.getItem(PROFILES_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -43,7 +46,7 @@ function registerProfile(name: string) {
   if (!list.includes(name)) {
     list.push(name);
     try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(list));
+      store.setItem(PROFILES_KEY, JSON.stringify(list));
     } catch {
       /* ignore */
     }
@@ -52,7 +55,7 @@ function registerProfile(name: string) {
 
 export function getSession(): Session | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = store.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Session> | null;
     if (!parsed?.username) return null;
@@ -89,7 +92,7 @@ export function loginAccount(options: LoginAccountOptions): Session {
     email: options.email,
   };
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    store.setItem(SESSION_KEY, JSON.stringify(session));
   } catch {
     /* ignore */
   }
@@ -108,7 +111,7 @@ export function login(rawUsername: string, isGuest = false): Session {
 
 export function logout() {
   try {
-    localStorage.removeItem(SESSION_KEY);
+    store.removeItem(SESSION_KEY);
   } catch {
     /* ignore */
   }

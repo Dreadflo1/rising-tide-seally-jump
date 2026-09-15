@@ -7,3 +7,8 @@ dist
 .env*.local
 
 .vercel
+
+# generated distribution bundles (regenerated from dist/ — no need to version)
+crazygames-build/
+crazygames-upload.zip
+html5-build.zip

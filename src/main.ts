@@ -11,6 +11,9 @@ import { login, getSession, logout as localLogout } from './auth';
 import { fetchGlobalLeaderboard, loadProfile, getState, BADGES, MAPS, SKINS } from './state';
 import { initCloudSync, cloudEmailLogin, cloudEmailSignup, cloudGoogleLogin, cloudLogout, getGoogleClientId, isCloudLoggedIn } from './cloud';
 import { initStore } from './store';
+import { initTuningPanel } from './tuningPanel';
+import { initWebAds } from './webAds';
+import { initCrazyAds, onCrazyGames } from './crazyAds';
 
 interface GoogleCredentialResponse {
   credential?: string;
@@ -35,6 +38,13 @@ declare global {
 // Register the cloud-sync hook up-front so in-game progress pushes to the cloud
 // whenever the player is logged into a cross-device account.
 initCloudSync();
+initTuningPanel(); // dev-only live tuning panel (?tune=1); no-op for players
+initWebAds(); // AdSense H5 ads on our own domain; no-op until ADSENSE_CLIENT is set
+// CrazyGames SDK — only loads on the *.crazygames.com portal. We keep the promise
+// so the boot path can wait for it there: the SDK's Data Module (persistent save)
+// must be ready BEFORE the first profile load, or that read hits an empty
+// localStorage and the player's saved progress wouldn't appear until a reload.
+const crazyReady = initCrazyAds();
 
 const BUILD_ID = 'gm-ad-debug-2026-07-30-c';
 
@@ -62,15 +72,17 @@ debugLog('[build-id]', BUILD_ID);
 debugLog('[verify-black-screen] main.ts loaded');
 //#endregion debug-point verify-black-screen-startup
 
-// Service worker = offline play + installable PWA, but ONLY on our own hosted
-// build (your domain / the Vercel deployment). On the GameDistribution portal
-// (their iframe, *.gamedistribution.com) and in local dev we keep it OFF and
-// actively unregister any stale worker — a SW there just risks stale-cache
-// ambiguity during review and adds nothing (the game can't be "installed" from
-// inside their iframe anyway).
+// Service worker = offline play + installable PWA, but ONLY on our OWN hosted
+// build (seally.best / the Vercel deployment). Inside ANY game portal iframe —
+// GameDistribution, CrazyGames, Poki … — and in local dev we keep it OFF and
+// actively unregister any stale worker: a SW there just risks stale-cache
+// ambiguity during their review and adds nothing (the game can't be "installed"
+// from inside their iframe anyway).
 if ('serviceWorker' in navigator) {
-  const isPortal = /gamedistribution\.com$/i.test(location.hostname);
-  const enableSW = import.meta.env.PROD && !isPortal;
+  const h = location.hostname;
+  const isOwnHost =
+    /(^|\.)seally\.best$/i.test(h) || /\.vercel\.app$/i.test(h) || h === 'localhost' || h === '127.0.0.1';
+  const enableSW = import.meta.env.PROD && isOwnHost;
   if (enableSW) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').catch((err) => debugLog('[pwa] SW register failed', err));
@@ -131,8 +143,17 @@ function bootGame() {
       width: WIDTH,
       height: HEIGHT,
       render: {
+        // antialias ON: this is a smooth-art (non-pixel-art) 2D game, so texture
+        // filtering matters a lot. With antialias:false Phaser sets the texture
+        // filter to NEAREST — every sprite/text drawn at a non-integer scale (which
+        // is almost all of them, after FIT + retina compositing) gets jagged,
+        // "pixelated" edges. antialias:true switches to LINEAR filtering so scaled
+        // sprites and text stay smooth. The GPU cost is negligible on modern phones.
         antialias: true,
+        // roundPixels stays OFF so the constant vertical scroll and moving platforms
+        // interpolate smoothly instead of snapping/shimmering pixel-to-pixel.
         roundPixels: false,
+        powerPreference: 'high-performance',
       },
       physics: {
         default: 'arcade',
@@ -173,7 +194,16 @@ function bootGame() {
 function setupEntry() {
   const landing = document.getElementById('landing');
   const gameEl = document.getElementById('game');
-  const showGame = () => {
+  const showGame = async () => {
+    // On the CrazyGames portal, wait for their SDK (Data Module) before booting so
+    // the first profile load reads the persisted cloud save, not empty localStorage.
+    if (onCrazyGames()) {
+      try {
+        await crazyReady;
+      } catch {
+        /* SDK failed — fall through to localStorage-backed play */
+      }
+    }
     if (landing) landing.style.display = 'none';
     if (gameEl) gameEl.style.display = 'block';
     bootGame();
@@ -188,7 +218,12 @@ function setupEntry() {
   const nav = navigator as Navigator & { standalone?: boolean };
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 
-  if (!landing || inIframe || isStandalone) {
+  // Boot straight to the game (skip the marketing landing) when embedded in a
+  // portal iframe, launched as an installed PWA, OR served from the CrazyGames
+  // portal. The last case matters for CrazyGames' "no external login options"
+  // rule: the landing hosts the Google/email sign-in modal, so on their domain we
+  // never render it — the in-game flow only offers a local nickname / guest.
+  if (!landing || inIframe || isStandalone || onCrazyGames()) {
     showGame();
     return;
   }

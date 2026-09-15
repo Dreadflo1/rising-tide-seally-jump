@@ -3,8 +3,8 @@ import { FONT_TITLE, FONT_BODY, S, debugLog } from '../constants';
 import { BadgeDef, MapDef, getState, registerShare, submitScoreGlobal, addCoins } from '../state';
 import { playSfx } from '../audio';
 import { showInterstitial, showRewardedAd, isRewardedReady } from '../ads';
-import { shareTo, hasNativeShare, SharePlatform } from '../share';
-import { buildShareButtons, getGameOverShareLayout } from '../gameOverShareLayout';
+import { shareTo, hasNativeShare, SharePlatform, SHARE_URL } from '../share';
+import { buildShareButtons } from '../gameOverShareLayout';
 
 interface GameOverData {
   meters: number;
@@ -12,6 +12,9 @@ interface GameOverData {
   bankedCoins: number;
   newBadges: BadgeDef[];
   newMaps: MapDef[];
+  adRevived?: boolean; // an ad-revive was already used this run → don't offer another
+  trashCleaned?: number; // run highlight: ocean trash collected this run
+  boats?: number; // run highlight: cleanup boats triggered this run
 }
 
 export default class GameOverScene extends Phaser.Scene {
@@ -30,43 +33,152 @@ export default class GameOverScene extends Phaser.Scene {
     const h = this.scale.height;
     const EMOJI_FONT = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Segoe UI Symbol",sans-serif';
     const TITLE_WITH_EMOJI = `"Baloo 2","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
+    const cx = w / 2;
+
     this.add.rectangle(w / 2, h / 2, w, h, 0x052736);
-    this.add.image(w / 2, h * 0.26, 'bg_storm').setDisplaySize(w, h * 0.6).setAlpha(0.5);
-
-    this.add
-      .text(w / 2, h * 0.09, 'THE TIDE GOT YOU!', {
-        fontFamily: FONT_TITLE,
-        fontSize: `${S(24)}px`,
-        color: '#ef476f',
-        stroke: '#0b3d5c',
-        strokeThickness: S(6),
-      })
-      .setOrigin(0.5);
-
-    this.add.image(w / 2, h * 0.2, 'player_seal').setScale(S(0.22)).setAngle(20).setAlpha(0.9);
+    this.add.image(w / 2, h * 0.28, 'bg_storm').setDisplaySize(w, h * 0.62).setAlpha(0.5);
 
     const st = getState();
     const isNewBest = this.data0.meters >= st.highScoreMeters;
 
-    this.add
-      .text(
-        w / 2,
-        h * 0.31,
-        `Height: ${this.data0.meters} m${isNewBest ? '  🏆 NEW BEST!' : ''}\nPearls collected: ${this.data0.coins} 🦪`,
-        { fontFamily: FONT_BODY, fontSize: `${S(16)}px`, color: '#ffffff', align: 'center', lineSpacing: S(6) }
-      )
-      .setOrigin(0.5);
+    // ---- One top-down flow with a consistent rhythm ---------------------------
+    // Everything is laid out by a single running cursor (`cy`) that advances by
+    // each element's real height plus a spacing token — tight WITHIN a group,
+    // wider BETWEEN groups. Nothing is positioned by h*0.xx fractions anymore, so
+    // elements can't overlap and the spacing reads deliberately. After building,
+    // the whole stack is shifted to sit vertically centered.
+    const G_TIGHT = S(8); // within a group
+    const G = S(16); // between related blocks
+    const G_GROUP = S(30); // between sections
+    const items: Phaser.GameObjects.GameObject[] = [];
+    let cy = 0;
 
-    // Global rank: submitted async so it never blocks this screen from
-    // showing immediately. Silently stays blank if the durable leaderboard
-    // isn't configured yet or the player is offline (see submitScoreGlobal).
-    const globalRankText = this.add
-      .text(w / 2, h * 0.36, '', {
+    // Results card — a subtle rounded panel drawn BEHIND the score block (filled
+    // once its bounds are known). Created here so it sits behind the later text.
+    const resultsPanel = this.add.graphics();
+    items.push(resultsPanel);
+
+    // Place a text/image top-centered at the cursor, then advance. `dh` overrides
+    // the advance height (needed for images, whose .height is unscaled).
+    const flow = <T extends Phaser.GameObjects.Text | Phaser.GameObjects.Image>(
+      obj: T,
+      gapAfter: number,
+      dh?: number
+    ): T => {
+      obj.setOrigin(0.5, 0).setPosition(cx, cy);
+      items.push(obj);
+      cy += (dh ?? obj.height) + gapAfter;
+      return obj;
+    };
+
+    // Uniform pill button: a rounded background + centred label inside a container,
+    // so every button shares a width/height and sits on the same centre axis (no
+    // more ragged padding-based widths). Placed top-aligned at the cursor (offset
+    // by dx); the caller advances cy. Returns the container for wiring handlers.
+    const makeButton = (
+      label: string,
+      opts: { w: number; hgt: number; bg: number; color: string; fontPx: number; dx?: number; fontFamily?: string }
+    ): Phaser.GameObjects.Container => {
+      const { w: bw, hgt, bg, color, fontPx, dx = 0, fontFamily = FONT_TITLE } = opts;
+      const g = this.add.graphics();
+      g.fillStyle(bg, 1);
+      g.fillRoundedRect(-bw / 2, -hgt / 2, bw, hgt, S(13));
+      const lbl = this.add
+        .text(0, 0, label, { fontFamily, fontSize: `${fontPx}px`, color, align: 'center' })
+        .setOrigin(0.5);
+      const c = this.add
+        .container(cx + dx, cy + hgt / 2, [g, lbl])
+        .setSize(bw, hgt)
+        .setInteractive({ useHandCursor: true });
+      c.on('pointerover', () => c.setScale(1.04));
+      c.on('pointerout', () => c.setScale(1));
+      items.push(c);
+      return c;
+    };
+
+    // Title
+    flow(
+      this.add.text(cx, 0, 'THE TIDE GOT YOU!', {
+        fontFamily: FONT_TITLE,
+        fontSize: `${S(26)}px`,
+        color: '#ef476f',
+        stroke: '#0b3d5c',
+        strokeThickness: S(6),
+      }),
+      G
+    );
+
+    // Seal
+    const seal = this.add.image(cx, cy, 'player_seal').setScale(S(0.2)).setAngle(16).setAlpha(0.92);
+    seal.setOrigin(0.5, 0);
+    items.push(seal);
+    cy += seal.displayHeight + G;
+
+    const panelTop = cy - S(10);
+
+    // Stats — the run's highlights, biggest first: height, pearls, and (the
+    // signature line) how much ocean you cleaned this run.
+    const trash = this.data0.trashCleaned ?? 0;
+    const boats = this.data0.boats ?? 0;
+    const statsLines = [
+      `Height: ${this.data0.meters} m${isNewBest ? '   🏆 NEW BEST!' : ''}`,
+      `Pearls collected: ${this.data0.coins} 🦪`,
+    ];
+    if (trash > 0) {
+      statsLines.push(`🧹 Ocean cleaned: ${trash}${boats > 0 ? `   ·   🚢 ${boats}` : ''}`);
+    }
+    flow(
+      this.add.text(cx, 0, statsLines.join('\n'), {
         fontFamily: FONT_BODY,
-        fontSize: `${S(12)}px`,
-        color: '#9be7ff',
-      })
-      .setOrigin(0.5);
+        fontSize: `${S(17)}px`,
+        color: '#ffffff',
+        align: 'center',
+        lineSpacing: S(7),
+      }),
+      G_TIGHT
+    );
+
+    // Loss-aversion hook (only when it's not a record).
+    const gapToBest = st.highScoreMeters - this.data0.meters;
+    if (!isNewBest && gapToBest > 0) {
+      flow(
+        this.add.text(cx, 0, `🏆 Only ${gapToBest} m from your best!`, {
+          fontFamily: FONT_BODY,
+          fontSize: `${S(14)}px`,
+          color: '#ffd166',
+        }),
+        G_TIGHT
+      );
+    }
+
+    // Global rank — reserve its slot now (fixed height) so the async fill never
+    // reflows the layout or overlaps the next block.
+    const globalRankText = this.add
+      .text(cx, cy, '', { fontFamily: FONT_BODY, fontSize: `${S(13)}px`, color: '#9be7ff' })
+      .setOrigin(0.5, 0);
+    items.push(globalRankText);
+    cy += S(22);
+    // Now the score block's bottom edge is known — paint the card behind it.
+    const panelW = S(340);
+    const panelX = cx - panelW / 2;
+    const panelH = cy - panelTop + S(10);
+    resultsPanel.fillStyle(0x0a2f47, 0.5);
+    resultsPanel.fillRoundedRect(panelX, panelTop, panelW, panelH, S(16));
+    resultsPanel.lineStyle(S(1.5), 0x3a7f95, 0.5);
+    resultsPanel.strokeRoundedRect(panelX, panelTop, panelW, panelH, S(16));
+    // Lifetime cleanup total — ties this run to the real mission (subtle footnote).
+    if (st.trashCleaned > 0) {
+      cy += S(10);
+      flow(
+        this.add.text(cx, 0, `🌊 ${st.trashCleaned.toLocaleString()} pieces of ocean cleaned all-time 💙`, {
+          fontFamily: FONT_BODY,
+          fontSize: `${S(12)}px`,
+          color: '#7ff0e0',
+        }),
+        0
+      );
+    }
+    cy += G_GROUP;
     let sceneClosed = false;
     this.events.once('shutdown', () => {
       sceneClosed = true;
@@ -77,136 +189,129 @@ export default class GameOverScene extends Phaser.Scene {
       globalRankText.setText(`🌍 Global rank: #${result.rank}${totalTxt}`);
     });
 
-    let y = h * 0.4;
+    // Medals / new maps (conditional).
+    let hadUnlock = false;
     if (this.data0.newBadges.length > 0) {
-      const badgeText = this.add
-        .text(w / 2, y, `New medal${this.data0.newBadges.length > 1 ? 's' : ''}: ${this.data0.newBadges.map((b) => `${b.icon} ${b.name} +${b.reward}🦪`).join(', ')}`, {
+      hadUnlock = true;
+      // 1–2 medals: name them. 3+ (a big NEW BEST run unlocking a batch): collapse
+      // to a single clean summary line instead of a 3-line wrapped wall of text.
+      const n = this.data0.newBadges.length;
+      const totalReward = this.data0.newBadges.reduce((s, b) => s + b.reward, 0);
+      const medalLabel =
+        n <= 2
+          ? `New medal${n > 1 ? 's' : ''}: ${this.data0.newBadges.map((b) => `${b.icon} ${b.name} +${b.reward}🦪`).join(', ')}`
+          : `🏅 ${n} new medals earned  ·  +${totalReward} 🦪`;
+      flow(
+        this.add.text(cx, 0, medalLabel, {
           fontFamily: FONT_BODY,
-          fontSize: `${S(12)}px`,
+          fontSize: `${S(13)}px`,
           color: '#ffd166',
           align: 'center',
-          wordWrap: { width: w - S(60) },
-        })
-        .setOrigin(0.5);
-      y += badgeText.height + S(12);
+          wordWrap: { width: w - S(120) },
+        }),
+        G_TIGHT
+      );
     }
     if (this.data0.newMaps.length > 0) {
-      const mapText = this.add
-        .text(w / 2, y, `New map unlocked: ${this.data0.newMaps.map((m) => m.name).join(', ')}!`, {
+      hadUnlock = true;
+      flow(
+        this.add.text(cx, 0, `New map unlocked: ${this.data0.newMaps.map((m) => m.name).join(', ')}!`, {
           fontFamily: FONT_BODY,
-          fontSize: `${S(12)}px`,
+          fontSize: `${S(13)}px`,
           color: '#06d6a0',
           align: 'center',
-          wordWrap: { width: w - S(60) },
-        })
-        .setOrigin(0.5);
-      y += mapText.height + S(10);
+          wordWrap: { width: w - S(80) },
+        }),
+        G_TIGHT
+      );
     }
+    if (hadUnlock) cy += G_GROUP - G_TIGHT; // promote the last tight gap to a section gap
 
-    // ---- Rewarded-ad offers: opt-in "watch an ad for a bonus" row. Only shown
-    // when a rewarded ad is actually preloaded and ready — no point offering a
-    // button that just says "no ad available". Placed before the share section
-    // so everything below flows via the `y` cursor. ----
+    // ---- Rewarded row (only when an ad is actually ready) --------------------
     if (isRewardedReady()) {
-    this.add
-      .text(w / 2, y + S(6), '🎬 WATCH AN AD FOR A BONUS', {
-        fontFamily: TITLE_WITH_EMOJI,
-        fontSize: `${S(13)}px`,
-        color: '#ffd166',
-      })
-      .setOrigin(0.5);
-    const rewardY = y + S(40);
-    const rewardNote = this.add
-      .text(w / 2, rewardY + S(34), '', {
-        fontFamily: FONT_BODY,
-        fontSize: `${S(11)}px`,
-        color: '#c9f7d9',
-        align: 'center',
-        wordWrap: { width: w - S(60) },
-      })
-      .setOrigin(0.5);
-
-    const makeRewardButton = (
-      x: number,
-      label: string,
-      bg: string,
-      onReward: () => void
-    ) => {
-      const btn = this.add
-        .text(x, rewardY, label, {
+      flow(
+        this.add.text(cx, 0, '🎬 Watch an ad for a bonus', {
           fontFamily: TITLE_WITH_EMOJI,
-          fontSize: `${S(15)}px`,
-          color: '#0b3d5c',
-          backgroundColor: bg,
-          padding: { x: S(14), y: S(9) },
+          fontSize: `${S(14)}px`,
+          color: '#ffd166',
+        }),
+        G
+      );
+
+      const rewardNote = this.add
+        .text(cx, 0, '', {
+          fontFamily: FONT_BODY,
+          fontSize: `${S(12)}px`,
+          color: '#c9f7d9',
+          align: 'center',
+          wordWrap: { width: w - S(80) },
         })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
-      btn.on('pointerdown', () => {
-        playSfx('click');
-        rewardNote.setText('Loading ad…');
-        showRewardedAd(
-          this,
-          onReward,
-          () => rewardNote.setText('No ad available right now — try again in a bit.')
-        );
+        .setOrigin(0.5, 0);
+
+      const REWARD_W = S(152);
+      const REWARD_H = S(52);
+      const wireReward = (c: Phaser.GameObjects.Container, onReward: () => void) => {
+        c.on('pointerdown', () => {
+          playSfx('click');
+          rewardNote.setText('Loading ad…');
+          showRewardedAd(this, onReward, () => rewardNote.setText('No ad available right now — try again in a bit.'));
+        });
+      };
+      // Continue + +10 as an equal-width, symmetric pair (or just +10 centred once
+      // the revive is used) — same size, even gap, both on the centre axis.
+      const twoUp = !this.data0.adRevived;
+      if (twoUp) {
+        const contBtn = makeButton('❤️ Continue', {
+          w: REWARD_W, hgt: REWARD_H, bg: 0x06d6a0, color: '#0b3d5c', fontPx: S(15), dx: -(REWARD_W / 2 + S(8)), fontFamily: TITLE_WITH_EMOJI,
+        });
+        wireReward(contBtn, () => {
+          this.scene.start('GameScene', {
+            revive: { meters: this.data0.meters, coins: this.data0.coins, bankedCoins: this.data0.bankedCoins, adRevived: true },
+          });
+        });
+      }
+      let pearlGranted = false;
+      const pearlsBtn = makeButton('+10 🦪', {
+        w: REWARD_W, hgt: REWARD_H, bg: 0xffd166, color: '#0b3d5c', fontPx: S(15), dx: twoUp ? REWARD_W / 2 + S(8) : 0, fontFamily: TITLE_WITH_EMOJI,
       });
-      return btn;
-    };
-
-    // Continue: revive the run at the same height (score/coins carried), using
-    // GameScene's existing revive path.
-    makeRewardButton(w / 2 - S(96), '❤️ Continue', '#06d6a0', () => {
-      this.scene.start('GameScene', {
-        revive: {
-          meters: this.data0.meters,
-          coins: this.data0.coins,
-          bankedCoins: this.data0.bankedCoins,
-        },
+      wireReward(pearlsBtn, () => {
+        if (pearlGranted) return;
+        addCoins(10);
+        pearlGranted = true;
+        rewardNote.setText('+10 🦪 added to your pearls!');
+        pearlsBtn.disableInteractive().setAlpha(0.5);
       });
-    });
+      cy += REWARD_H + G_TIGHT;
 
-    // +10 pearls (once per game-over — disable after a successful grant).
-    let pearlsBtn: Phaser.GameObjects.Text;
-    pearlsBtn = makeRewardButton(w / 2 + S(96), '+10 🦪', '#ffd166', () => {
-      addCoins(10);
-      rewardNote.setText('+10 🦪 added to your pearls!');
-      pearlsBtn.disableInteractive().setAlpha(0.5);
-    });
-
-      y = rewardY + S(70);
+      rewardNote.setPosition(cx, cy);
+      items.push(rewardNote);
+      cy += S(16) + G_GROUP;
     }
 
-    const shareLayout = getGameOverShareLayout({
-      width: w,
-      height: h,
-      contentBottomY: y,
-      buttonCount: buildShareButtons(hasNativeShare()).length,
-    });
-
-    // Share row: native "share anywhere" (mobile OS sheet lists TikTok/IG/FB/X
-    // etc.) plus explicit per-platform buttons.
-    this.add
-      .text(w / 2, shareLayout.titleY, '📣 SHARE YOUR SCORE', {
+    // ---- Share ---------------------------------------------------------------
+    flow(
+      this.add.text(cx, 0, '📣 Share your score', {
         fontFamily: TITLE_WITH_EMOJI,
-        fontSize: `${S(shareLayout.titleFontSize)}px`,
+        fontSize: `${S(19)}px`,
         color: '#ffffff',
-      })
-      .setOrigin(0.5);
+      }),
+      G
+    );
+
     const shareNote = this.add
-      .text(w / 2, shareLayout.noteY, '', {
+      .text(cx, 0, '', {
         fontFamily: FONT_BODY,
-        fontSize: `${S(11)}px`,
+        fontSize: `${S(12)}px`,
         color: '#c9f7d9',
         align: 'center',
-        wordWrap: { width: w - S(60) },
+        wordWrap: { width: w - S(80) },
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5, 0);
 
     let shareAwarded = false;
     const doShare = async (platform: SharePlatform) => {
       playSfx('click');
-      const result = await shareTo(platform, this.data0.meters, st.username, window.location.href);
+      const result = await shareTo(platform, this.data0.meters, st.username, SHARE_URL);
       if (result.ok && !shareAwarded) {
         registerShare(); // +25 pearls, once per game-over
         shareAwarded = true;
@@ -214,48 +319,56 @@ export default class GameOverScene extends Phaser.Scene {
       if (result.note) shareNote.setText(result.note);
     };
 
-    const buttons: { emoji: string; p: SharePlatform }[] = buildShareButtons(hasNativeShare());
+    const buttons = buildShareButtons(hasNativeShare());
+    const CHIP_R = S(23);
+    const ICON = S(28);
+    const ICON_GAP = S(62); // centre-to-centre; > 2·CHIP_R so chips never touch
+    const startX = cx - ((buttons.length - 1) * ICON_GAP) / 2;
+    const iconCenterY = cy + CHIP_R;
     buttons.forEach((b, i) => {
-      const pos = shareLayout.buttonPositions[i];
+      const chip = this.add.circle(0, 0, CHIP_R, 0xffffff);
+      let glyph: Phaser.GameObjects.GameObject;
+      if (b.icon && this.textures.exists(b.icon)) {
+        glyph = this.add.image(0, 0, b.icon).setDisplaySize(ICON, ICON);
+      } else {
+        glyph = this.add.text(0, 0, b.emoji, { fontFamily: EMOJI_FONT, fontSize: `${S(24)}px` }).setOrigin(0.5);
+      }
       const btn = this.add
-        .text(pos.x, pos.y + pos.offsetY, b.emoji, { fontFamily: EMOJI_FONT, fontSize: `${S(shareLayout.iconFontSize)}px` })
-        .setOrigin(0.5)
+        .container(startX + i * ICON_GAP, iconCenterY, [chip, glyph])
+        .setSize(CHIP_R * 2, CHIP_R * 2)
         .setInteractive({ useHandCursor: true });
-      btn.on('pointerover', () => btn.setScale(1.2));
+      btn.on('pointerover', () => btn.setScale(1.12));
       btn.on('pointerout', () => btn.setScale(1));
       btn.on('pointerdown', () => doShare(b.p));
+      items.push(btn);
     });
+    cy += CHIP_R * 2 + G_TIGHT;
 
-    // Single Play Again — always shows the interstitial ad, then restarts.
-    const playAgain = this.add
-      .text(w / 2, shareLayout.playAgainY, '▶ PLAY AGAIN', {
-        fontFamily: FONT_TITLE,
-        fontSize: `${S(20)}px`,
-        color: '#0b3d5c',
-        backgroundColor: '#06d6a0',
-        padding: { x: S(24), y: S(12) },
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    shareNote.setPosition(cx, cy);
+    items.push(shareNote);
+    cy += S(16) + G_GROUP;
+
+    // ---- Primary actions — same width, centred, clear separation -------------
+    const BTN_W = S(232);
+    const playAgain = makeButton('▶ PLAY AGAIN', { w: BTN_W, hgt: S(58), bg: 0x06d6a0, color: '#0b3d5c', fontPx: S(20) });
     playAgain.on('pointerdown', () => {
       playSfx('click');
       debugLog('[verify-no-ad] GameOver PLAY AGAIN pressed');
       showInterstitial(this, () => this.scene.start('GameScene'));
     });
+    cy += S(58) + G;
 
-    const menuBtn = this.add
-      .text(w / 2, shareLayout.menuY, 'MAIN MENU', {
-        fontFamily: FONT_TITLE,
-        fontSize: `${S(14)}px`,
-        color: '#ffffff',
-        backgroundColor: '#124b6b',
-        padding: { x: S(16), y: S(8) },
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    const menuBtn = makeButton('MAIN MENU', { w: BTN_W, hgt: S(46), bg: 0x124b6b, color: '#ffffff', fontPx: S(15) });
     menuBtn.on('pointerdown', () => {
       playSfx('click');
       this.scene.start('TitleScene');
+    });
+    cy += S(46);
+
+    // Centre the whole stack vertically (with a safe top margin on short screens).
+    const offset = Math.max(S(18), (h - cy) / 2);
+    items.forEach((o) => {
+      (o as unknown as { y: number }).y += offset;
     });
   }
 }
