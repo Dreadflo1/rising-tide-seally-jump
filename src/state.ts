@@ -61,10 +61,13 @@ export const MAPS: MapDef[] = [
 
 export const SKINS: SkinDef[] = [
   { id: 'seal', name: 'Seally', sprite: 'player_seal', cost: 0 },
-  { id: 'gold', name: 'Seally Gold', sprite: 'seal_skin_gold', cost: 7000 },
-  { id: 'violet', name: 'Violet Seally', sprite: 'seal_skin_violet', cost: 12000 },
-  { id: 'kelp', name: 'Kelp Seally', sprite: 'seal_skin_kelp', cost: 15000 },
-  { id: 'hawaii', name: 'Hawaiian Seally', sprite: 'seal_skin_hawaii', cost: 17000 },
+  { id: 'surfer', name: 'Surfer Seally', sprite: 'seal_skin_surfer', cost: 5000 },
+  { id: 'cool', name: 'Cool Seally', sprite: 'seal_skin_cool', cost: 6000 },
+  { id: 'scuba', name: 'Scuba Seally', sprite: 'seal_skin_scuba', cost: 8000 },
+  { id: 'floatie', name: 'Floatie Seally', sprite: 'seal_skin_floatie', cost: 9000 },
+  { id: 'pirate', name: 'Pirate Seally', sprite: 'seal_skin_pirate', cost: 12000 },
+  { id: 'astronaut', name: 'Astronaut Seally', sprite: 'seal_skin_astronaut', cost: 16000 },
+  { id: 'neptune', name: 'King Neptune Seally', sprite: 'seal_skin_neptune', cost: 28000 },
 ];
 
 // Extra lives: earned every 350 m in a run and purchasable in the shop, capped

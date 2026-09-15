@@ -49,10 +49,13 @@ export default class BootScene extends Phaser.Scene {
     // is served from a subpath on GameMonetize's CDN. Verify currently serves
     // root files correctly but 404s nested folders, so flatten there.
     this.load.image('player_seal', resolveAssetPath('sprites/player_seal.png'));
-    this.load.image('seal_skin_gold', resolveAssetPath('sprites/seal_skin_gold.png'));
-    this.load.image('seal_skin_violet', resolveAssetPath('sprites/seal_skin_violet.png'));
-    this.load.image('seal_skin_kelp', resolveAssetPath('sprites/seal_skin_kelp.png'));
-    this.load.image('seal_skin_hawaii', resolveAssetPath('sprites/seal_skin_hawaii.png'));
+    this.load.image('seal_skin_surfer', resolveAssetPath('sprites/seal_skin_surfer.png'));
+    this.load.image('seal_skin_cool', resolveAssetPath('sprites/seal_skin_cool.png'));
+    this.load.image('seal_skin_scuba', resolveAssetPath('sprites/seal_skin_scuba.png'));
+    this.load.image('seal_skin_floatie', resolveAssetPath('sprites/seal_skin_floatie.png'));
+    this.load.image('seal_skin_pirate', resolveAssetPath('sprites/seal_skin_pirate.png'));
+    this.load.image('seal_skin_astronaut', resolveAssetPath('sprites/seal_skin_astronaut.png'));
+    this.load.image('seal_skin_neptune', resolveAssetPath('sprites/seal_skin_neptune.png'));
     this.load.image('platform_normal', resolveAssetPath('sprites/platform_normal.png'));
     this.load.image('platform_move', resolveAssetPath('sprites/platform_move.png'));
     this.load.image('platform_break', resolveAssetPath('sprites/platform_break.png'));

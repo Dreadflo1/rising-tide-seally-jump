@@ -4,7 +4,7 @@
 // every deploy) — instead it caches whatever the player has actually
 // loaded, so repeat visits and brief network drops fall back to cache
 // instead of a blank screen.
-const CACHE_NAME = 'seal-jump-v17';
+const CACHE_NAME = 'seal-jump-v19';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
