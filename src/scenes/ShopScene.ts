@@ -100,7 +100,10 @@ export default class ShopScene extends Phaser.Scene {
   private renderContent() {
     this.content.removeAll(true);
     const w = this.scale.width;
-    this.coinLabel.setText(`🦪 ${getState().totalCoins}`);
+    // Skins are bought with trash collected (♻️); everything else uses pearls (🦪).
+    // Show whichever balance is relevant to the active tab.
+    const st0 = getState();
+    this.coinLabel.setText(this.tab === 'skins' ? `♻️ ${st0.trashCleaned} trash` : `🦪 ${st0.totalCoins}`);
 
     if (this.tab === 'skins') this.renderSkins(w);
     else if (this.tab === 'maps') this.renderMaps(w);
@@ -125,7 +128,7 @@ export default class ShopScene extends Phaser.Scene {
       const sub = this.add.text(
         S(120),
         y + S(6),
-        owned ? (selected ? 'Equipped' : 'Owned') : `${skin.cost} 🦪`,
+        owned ? (selected ? 'Equipped' : 'Owned') : `${skin.cost} ♻️`,
         { fontFamily: FONT_BODY, fontSize: `${S(13)}px`, color: owned ? '#06d6a0' : '#ffd166' }
       );
       const btn = this.add

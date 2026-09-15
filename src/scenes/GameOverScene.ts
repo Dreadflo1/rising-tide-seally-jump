@@ -125,7 +125,7 @@ export default class GameOverScene extends Phaser.Scene {
       `Pearls collected: ${this.data0.coins} 🦪`,
     ];
     if (trash > 0) {
-      statsLines.push(`🧹 Ocean cleaned: ${trash}${boats > 0 ? `   ·   🚢 ${boats}` : ''}`);
+      statsLines.push(`♻️ Trash collected: ${trash}${boats > 0 ? `   ·   🚢 ${boats}` : ''}`);
     }
     flow(
       this.add.text(cx, 0, statsLines.join('\n'), {
@@ -166,12 +166,12 @@ export default class GameOverScene extends Phaser.Scene {
     resultsPanel.fillRoundedRect(panelX, panelTop, panelW, panelH, S(16));
     resultsPanel.lineStyle(S(1.5), 0x3a7f95, 0.5);
     resultsPanel.strokeRoundedRect(panelX, panelTop, panelW, panelH, S(16));
-    // Lifetime cleanup total — ties this run to the real mission (subtle footnote).
+    // Spendable trash balance — the ♻️ currency for skins (subtle footnote).
     // Placed BELOW the card's bottom edge (was overlapping the border/rank line).
     if (st.trashCleaned > 0) {
       cy = panelTop + panelH + S(16);
       flow(
-        this.add.text(cx, 0, `🌊 ${st.trashCleaned.toLocaleString()} pieces of ocean cleaned all-time 💙`, {
+        this.add.text(cx, 0, `♻️ ${st.trashCleaned.toLocaleString()} trash to spend on skins 💙`, {
           fontFamily: FONT_BODY,
           fontSize: `${S(12)}px`,
           color: '#7ff0e0',

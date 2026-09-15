@@ -167,7 +167,6 @@ export default class GameScene extends Phaser.Scene {
   private cleanupGoal = 8;
   private trashThisRun = 0; // total trash collected this run (for the Game Over highlights)
   private boatsThisRun = 0; // cleanup boats triggered this run (highlight)
-  private cleanupBarFill?: Phaser.GameObjects.Graphics;
   private cleanupLabel?: Phaser.GameObjects.Text;
   private boatBusy = false; // guards against re-triggering the boat mid-sweep
   // Shuffle-bag of power-up kinds so the SAME one never repeats redundantly — each
@@ -350,23 +349,16 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(200);
     this.updateLivesHud();
 
-    // Cleanup gauge (top-left, under the hearts): a small ♻️ bar that fills as you
-    // collect ocean trash. Full → the cleanup boat sweeps (see triggerCleanupBoat).
-    const barX = S(16);
-    const barY = S(78);
-    const barW = S(132);
-    const barH = S(12);
-    const gaugeBg = this.add.graphics().setScrollFactor(0).setDepth(199);
-    gaugeBg.fillStyle(0x0a2f47, 0.72);
-    gaugeBg.fillRoundedRect(barX, barY, barW, barH, S(6));
-    gaugeBg.lineStyle(S(1), 0x3a7f95, 0.7);
-    gaugeBg.strokeRoundedRect(barX, barY, barW, barH, S(6));
-    this.cleanupBarFill = this.add.graphics().setScrollFactor(0).setDepth(200);
+    // Trash counter (top-left, under the hearts): a simple ♻️ tally of ocean trash
+    // collected this run. Trash is the currency you spend on skins; collecting
+    // enough still launches the cleanup boat (see triggerCleanupBoat).
     this.cleanupLabel = this.add
-      .text(barX + barW + S(8), barY + barH / 2, '', {
+      .text(S(16), S(82), '', {
         fontFamily: '"Baloo 2","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
-        fontSize: `${S(12)}px`,
+        fontSize: `${S(16)}px`,
         color: '#7ff0e0',
+        stroke: '#0b3d5c',
+        strokeThickness: S(4),
       })
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
@@ -1006,19 +998,11 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  // Refresh the trash counter HUD (a plain tally, not a gauge). Shows how much
+  // ocean trash has been scooped this run — the ♻️ currency added to the player's
+  // balance at game over and spent on skins.
   private updateCleanupGauge() {
-    if (!this.cleanupBarFill) return;
-    const barX = S(16);
-    const barY = S(78);
-    const barW = S(132);
-    const barH = S(12);
-    const pct = Phaser.Math.Clamp(this.cleanupCount / this.cleanupGoal, 0, 1);
-    this.cleanupBarFill.clear();
-    if (pct > 0) {
-      this.cleanupBarFill.fillStyle(0x2ee6c8, 0.95);
-      this.cleanupBarFill.fillRoundedRect(barX + S(1.5), barY + S(1.5), Math.max(S(4), (barW - S(3)) * pct), barH - S(3), S(5));
-    }
-    if (this.cleanupLabel) this.cleanupLabel.setText(`♻️ ${this.cleanupCount}/${this.cleanupGoal}`);
+    if (this.cleanupLabel) this.cleanupLabel.setText(`♻️ ${this.trashThisRun}`);
   }
 
   private handlePowerup(_player: any, puObj: any) {

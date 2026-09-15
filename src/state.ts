@@ -59,15 +59,18 @@ export const MAPS: MapDef[] = [
   { id: 'storm', name: 'Storm Depths', bg: 'bg_storm', unlockThreshold: 1000, tideMult: 1.35, hazardMult: 1.6, coinMult: 1.6, blurb: 'Brutal tide, heavy hazards · +60% pearls' },
 ];
 
+// Skins are bought with TRASH COLLECTED (the ♻️ cleanup currency), not pearls, so
+// `cost` here is in pieces of ocean trash. Prices are trash-scale (a good run
+// nets ~15-30 pieces) — earnable through play, ramping up to the rare ones.
 export const SKINS: SkinDef[] = [
   { id: 'seal', name: 'Seally', sprite: 'player_seal', cost: 0 },
-  { id: 'surfer', name: 'Surfer Seally', sprite: 'seal_skin_surfer', cost: 5000 },
-  { id: 'cool', name: 'Cool Seally', sprite: 'seal_skin_cool', cost: 6000 },
-  { id: 'scuba', name: 'Scuba Seally', sprite: 'seal_skin_scuba', cost: 8000 },
-  { id: 'floatie', name: 'Floatie Seally', sprite: 'seal_skin_floatie', cost: 9000 },
-  { id: 'pirate', name: 'Pirate Seally', sprite: 'seal_skin_pirate', cost: 12000 },
-  { id: 'astronaut', name: 'Astronaut Seally', sprite: 'seal_skin_astronaut', cost: 16000 },
-  { id: 'neptune', name: 'King Neptune Seally', sprite: 'seal_skin_neptune', cost: 28000 },
+  { id: 'surfer', name: 'Surfer Seally', sprite: 'seal_skin_surfer', cost: 40 },
+  { id: 'cool', name: 'Cool Seally', sprite: 'seal_skin_cool', cost: 75 },
+  { id: 'scuba', name: 'Scuba Seally', sprite: 'seal_skin_scuba', cost: 130 },
+  { id: 'floatie', name: 'Floatie Seally', sprite: 'seal_skin_floatie', cost: 200 },
+  { id: 'pirate', name: 'Pirate Seally', sprite: 'seal_skin_pirate', cost: 320 },
+  { id: 'astronaut', name: 'Astronaut Seally', sprite: 'seal_skin_astronaut', cost: 500 },
+  { id: 'neptune', name: 'King Neptune Seally', sprite: 'seal_skin_neptune', cost: 800 },
 ];
 
 // Extra lives: earned every 350 m in a run and purchasable in the shop, capped
@@ -359,7 +362,8 @@ export function buySkin(id: string): boolean {
   const skin = SKINS.find((s) => s.id === id);
   if (!skin) return false;
   if (state.ownedSkins.includes(id)) return true;
-  if (!spendCoins(skin.cost)) return false;
+  // Skins are paid for with TRASH COLLECTED (♻️), not pearls.
+  if (!spendTrash(skin.cost)) return false;
   state.ownedSkins.push(id);
   saveState();
   return true;
@@ -417,6 +421,15 @@ export function buyLife(cost: number): boolean {
  *  game over via registerRun()'s saveState(). */
 export function addTrashCleaned(n: number) {
   state.trashCleaned += n;
+}
+
+/** Spend trash collected (♻️) — the currency used to buy skins. Returns false if
+ *  the player doesn't have enough. */
+export function spendTrash(n: number): boolean {
+  if (state.trashCleaned < n) return false;
+  state.trashCleaned -= n;
+  saveState();
+  return true;
 }
 
 export function donateToCharity(coins: number): boolean {
