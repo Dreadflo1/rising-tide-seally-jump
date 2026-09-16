@@ -377,6 +377,34 @@ export default class GameScene extends Phaser.Scene {
     this.slipperyUntil = 0;
     this.lastAnnouncedLevel = 1;
 
+    // Fresh-run goal banner: states the two-pillar objective — climb UP and clean
+    // the ocean — then fades so it never gets in the way. Skipped on a revive.
+    if (!this.reviveData) {
+      const w = this.scale.width;
+      const goal = this.add
+        .text(w / 2, S(150), '🧗 Jump higher\n♻️ Scoop the trash to clean the ocean', {
+          fontFamily: '"Baloo 2","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+          fontSize: `${S(16)}px`,
+          color: '#eafcff',
+          align: 'center',
+          stroke: '#0b3d5c',
+          strokeThickness: S(5),
+          lineSpacing: S(4),
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(210);
+      this.tweens.add({
+        targets: goal,
+        alpha: 0,
+        y: S(120),
+        delay: 3000,
+        duration: 1100,
+        ease: 'sine.in',
+        onComplete: () => goal.destroy(),
+      });
+    }
+
     // Rewarded-ad revive: keep the previous run's score/coins and difficulty,
     // but drop back into a fresh, safe climb (player already spawns at the
     // bottom with the tide well below) plus a brief invulnerability + upward

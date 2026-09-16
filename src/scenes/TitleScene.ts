@@ -48,6 +48,16 @@ export default class TitleScene extends Phaser.Scene {
         strokeThickness: S(6),
       })
       .setOrigin(0.5);
+    // Two-pillar tagline so the goal reads instantly: climb UP + clean the ocean.
+    this.add
+      .text(w / 2, h * 0.13 + S(72), '🧗 Climb higher   ·   ♻️ Clean the ocean', {
+        fontFamily: '"Nunito","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+        fontSize: `${S(14)}px`,
+        color: '#d8f6ff',
+        stroke: '#0b3d5c',
+        strokeThickness: S(3),
+      })
+      .setOrigin(0.5);
 
     const st = getState();
 
