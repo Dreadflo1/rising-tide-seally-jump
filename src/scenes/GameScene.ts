@@ -801,14 +801,17 @@ export default class GameScene extends Phaser.Scene {
     if (kind === 'rock') {
       const fromLeft = Math.random() < 0.5;
       const startX = fromLeft ? -S(20) : w + S(20);
-      const speed = S(90 + Math.min(this.difficultyLevel * 6, 90));
-      const dir = fromLeft ? 1 : -1;
+      // Thrown from the side at roughly Seally's height, then AIMED at him (with a
+      // small upward lead for his climb) so the rock actually CONVERGES on the seal
+      // and knocks him off balance — the old version swept far overhead and always
+      // whiffed ("rocks appear but nothing happens").
+      const startY = this.player.y - Phaser.Math.Between(S(0), S(80));
+      const speed = S(210 + Math.min(this.difficultyLevel * 8, 120));
 
       // Quick flash of the poacher at the edge the rock is thrown from —
-      // purely cosmetic, self-destroys, never joins the hazards group so
-      // it can't collide or need cleanup bookkeeping.
+      // purely cosmetic, self-destroys, never joins the hazards group.
       const thrower = this.add
-        .text(fromLeft ? S(10) : w - S(10), y, '🧍', { fontSize: `${S(22)}px` })
+        .text(fromLeft ? S(10) : w - S(10), startY, '🧍', { fontSize: `${S(22)}px` })
         .setOrigin(0.5)
         .setDepth(18)
         .setAlpha(0);
@@ -821,7 +824,7 @@ export default class GameScene extends Phaser.Scene {
         onComplete: () => thrower.destroy(),
       });
 
-      const rock = this.add.text(startX, y, '🪨', { fontSize: `${S(27)}px` }).setOrigin(0.5).setDepth(19);
+      const rock = this.add.text(startX, startY, '🪨', { fontSize: `${S(27)}px` }).setOrigin(0.5).setDepth(19);
       this.physics.add.existing(rock);
       // Cast to `any` here on purpose: Group.add()'s TS typings want a
       // GameObjectWithBody with a *required* body property, but Text's
@@ -831,11 +834,19 @@ export default class GameScene extends Phaser.Scene {
       this.hazards.add(rock as any);
       const body = rock.body as Phaser.Physics.Arcade.Body;
       body.setAllowGravity(false);
-      body.setVelocityX(dir * speed);
-      body.setSize(S(18), S(18));
+      // Aim where Seally will be: lead his upward climb by the flight time.
+      const dist = Phaser.Math.Distance.Between(startX, startY, this.player.x, this.player.y);
+      const tFlight = dist / speed;
+      const leadY = this.player.y - Math.min(S(200), S(150) * tFlight);
+      this.physics.moveTo(rock, this.player.x, leadY, speed);
+      body.setSize(S(20), S(20));
       rock.setData('kind', 'rock');
       this.glow(rock, 0xff7a3d, 4);
-      this.tweens.add({ targets: rock, angle: dir * 360, duration: 900, repeat: -1 });
+      this.tweens.add({ targets: rock, angle: (fromLeft ? 1 : -1) * 360, duration: 900, repeat: -1 });
+      // Safety: a rock that misses flies off-screen — bin it so misses can't pile up.
+      this.time.delayedCall(5000, () => {
+        if (rock.active) rock.destroy();
+      });
       return;
     }
 
